@@ -1,5 +1,5 @@
 ---
-title: "XOR Classification with a 3-Layer Neural Network"
+title: "XOR Gate Classification with a 3-Layer Neural Network"
 sidebarTitle: "XOR"
 description: "Step-by-step walkthrough of training a feedforward neural network to solve the XOR problem using Neural Network Framework and gradient descent."
 ---
@@ -35,7 +35,7 @@ With only four samples, every epoch runs through the entire dataset. The network
 
 ### Define the network layers
 
-Create an `InputLayer` with 2 neurons and sigmoid activation, then attach a `HiddenLayer` with 2 neurons and sigmoid activation. Attach the `OutputLayer` with 1 neuron, linear activation, and MSE loss. Collect the layers in a list to form the `ANN` pipeline.
+Create an `InputLayer` with 2 neurons and sigmoid activation, then attach a `HiddenLayer` with 2 neurons and sigmoid activation. Attach the `OutputLayer` with 1 neuron, linear activation, and MSE loss. Initialize weights with `'normal_random'` (standard normal distribution) and biases with `'normal_random'` for both hidden and output layers. Collect the layers in a list to form the `ANN` pipeline.
 
 ```python xor.py
 from ANN import *
@@ -46,14 +46,20 @@ i = InputLayer(2, "sigmoid")
 
 h1 = HiddenLayer(2, "sigmoid")
 h1.attach_after(i)
-h1.set_weights("random")
+h1.set_weights("normal_random")
+h1.set_biases("normal_random")
 
 o = OutputLayer(1, "none", "MSE")
 o.attach_after(h1)
-o.set_weights("random")
+o.set_weights("normal_random")
+o.set_biases("normal_random")
 
 ANN = [i, h1, o]
 ```
+
+<Warning>
+The original `Xor.py` source calls `set_weights("random")` for both layers and omits `set_biases` entirely. `"random"` is **not** a recognized method in `ANN.py` — the valid options are `'normal_random'`, `'uniform_random'`, `'xavier'`, `'he'`, `'lecun'`, and `'one'`. Passing `"random"` matches no branch, leaving `W` as `None`. Similarly, skipping `set_biases` leaves `Bias` as `None`. Both conditions cause a `TypeError` during the forward pass when NumPy tries to compute `np.dot(None, ...) + None`. The corrected code above uses `'normal_random'` for both weights and biases.
+</Warning>
 
 <Tip>
 `attach_after` sets the `previous` pointer on the new layer and the `next` pointer on the preceding one — both are required for the forward and backward passes to chain correctly.
@@ -80,7 +86,7 @@ y = np.array([
 
 ### Define and run the gradient descent loop
 
-The `gradient_descent` function iterates for a fixed number of epochs. Each epoch loops over every sample: it runs a full forward pass through `ANN`, then a backward pass from the last layer to the first, and finally updates every weight matrix `W` and bias vector `Bias` by the gradient scaled with the learning rate `eta`.
+This example defines its own local `gradient_descent` function rather than using the library's `gradient_descent_epoch`. The local version is simpler — it does not track per-epoch accuracy. It iterates for a fixed number of epochs, and each epoch loops over every sample: it runs a full forward pass through `ANN`, then a backward pass from the last layer to the first, and finally updates every weight matrix `W` and bias vector `Bias` by the gradient scaled with the learning rate `eta`.
 
 ```python xor.py
 def gradient_descent(ANN, x, y, epochs):
@@ -162,11 +168,13 @@ i = InputLayer(2, "sigmoid")
 
 h1 = HiddenLayer(2, "sigmoid")
 h1.attach_after(i)
-h1.set_weights("random")
+h1.set_weights("normal_random")
+h1.set_biases("normal_random")
 
 o = OutputLayer(1, "none", "MSE")
 o.attach_after(h1)
-o.set_weights("random")
+o.set_weights("normal_random")
+o.set_biases("normal_random")
 
 ANN = [i, h1, o]
 

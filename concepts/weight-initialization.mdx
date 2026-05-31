@@ -1,7 +1,7 @@
 ---
-title: "Weight and Bias Initialization Methods"
+title: "Weight and Bias Initialization in Neural Network Framework"
 sidebarTitle: "Weight Init"
-description: "All weight and bias initialization strategies in Neural Network Framework: normal random, uniform random, Xavier, He, LeCun, and constant initializers."
+description: "Every weight and bias initializer in Neural Network Framework: normal random, uniform random, Xavier, He, LeCun, ones, zeros, and constant strategies."
 ---
 
 Weight and bias initialisation is one of the most consequential decisions when building a neural network. Poor initialisation can cause gradients to vanish or explode during the very first backpropagation step, leaving the network unable to learn. Neural Network Framework exposes a set of principled initialisation strategies through the `set_weights(method)` and `set_biases(method)` methods available on `HiddenLayer` and `OutputLayer`. This page lists every supported method string, the formula or distribution it uses, and guidance on when to apply it.
@@ -68,17 +68,27 @@ where `self.length` is `n_out`.
 
 <Accordion title="'he' — He / Kaiming Normal">
 
-Scales a standard-normal draw by `sqrt(2 / (n_in * n_out))`. Designed specifically for ReLU-family activations, where half the neurons are zeroed out on average.
+Scales a standard-normal draw by a factor derived from the layer dimensions. Designed specifically for ReLU-family activations, where half the neurons are zeroed out on average.
 
 ```python
 layer.set_weights('he')
 ```
 
+The exact formula differs between layer types:
+
+**`HiddenLayer`** — divides by the product of input and output sizes:
+
 ```python
 self.W = np.random.randn(n_out, n_in) * np.sqrt(2.0 / (n_in * n_out))
 ```
 
-**When to use:** `'relu'` hidden layers. The canonical He formula is `sqrt(2 / n_in)`; this version divides by `n_in * n_out` which produces a more conservative (smaller) variance.
+**`OutputLayer`** — divides only by input size:
+
+```python
+self.W = np.random.randn(n_out, n_in) * np.sqrt(2.0 / n_in)
+```
+
+**When to use:** `'relu'` hidden and output layers. The canonical He formula is `sqrt(2 / n_in)`; `HiddenLayer` uses the more conservative `sqrt(2 / (n_in * n_out))` which produces smaller initial weights.
 
 </Accordion>
 

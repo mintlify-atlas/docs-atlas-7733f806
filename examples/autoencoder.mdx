@@ -1,7 +1,7 @@
 ---
 title: "Binary Autoencoder: Compress and Reconstruct Bit Vectors"
 sidebarTitle: "Autoencoder"
-description: "Build a binary autoencoder with Neural Network Framework that compresses 5-bit vectors into a 3-neuron hidden layer and reconstructs them with binary cross-entropy loss."
+description: "Build a binary autoencoder with Neural Network Framework that compresses 5-bit vectors through a 3-neuron bottleneck using binary cross-entropy."
 ---
 
 An autoencoder is a neural network that learns to compress its input into a lower-dimensional representation and then reconstruct it as accurately as possible. The first half of the network — the *encoder* — maps the original input down to a compact hidden state called the *bottleneck*. The second half — the *decoder* — maps that bottleneck representation back to the original space. By forcing information through a narrower channel, the network must learn the most important structure in the data. This example uses Neural Network Framework to build a binary autoencoder that compresses all 32 possible 5-bit sequences through a 3-neuron bottleneck and reconstructs them using binary cross-entropy loss.
@@ -32,7 +32,7 @@ The dataset is every possible 5-bit combination — all 32 sequences from `[0,0,
 
 ### Define the network
 
-Create the three-layer autoencoder and assign random initial weights. Note that biases are not explicitly set here; the network relies on the default random weight initialization from `set_weights("random")`.
+Create the three-layer autoencoder and initialize weights and biases with `'normal_random'`. Both `set_weights` and `set_biases` must be called on every `HiddenLayer` and `OutputLayer`; omitting either leaves the corresponding attribute as `None`, which causes a `TypeError` during the forward pass.
 
 ```python autoencoder.py
 from ANN import *
@@ -44,14 +44,20 @@ i = InputLayer(5, "tanh")
 
 h1 = HiddenLayer(3, "tanh")
 h1.attach_after(i)
-h1.set_weights("random")
+h1.set_weights("normal_random")
+h1.set_biases("normal_random")
 
 o = OutputLayer(5, "sigmoid", "bincrossentropy")
 o.attach_after(h1)
-o.set_weights("random")
+o.set_weights("normal_random")
+o.set_biases("normal_random")
 
 ANN = [i, h1, o]
 ```
+
+<Warning>
+The original `autoencoder.py` source calls `set_weights("random")` and omits `set_biases` entirely. `"random"` is **not** a recognized method in `ANN.py` — the valid options are `'normal_random'`, `'uniform_random'`, `'xavier'`, `'he'`, `'lecun'`, and `'one'`. Passing `"random"` matches no branch in `set_weights`, leaving `W` as `None`. Omitting `set_biases` leaves `Bias` as `None`. Both cause a `TypeError` when `forward()` computes `np.dot(W, ...) + Bias`. The corrected code above uses `'normal_random'` for both.
+</Warning>
 
 ### Prepare the training data
 
@@ -130,7 +136,7 @@ y = np.array([
 
 ### Train with gradient descent
 
-The local `gradient_descent` function runs online updates — one weight update per sample per epoch — for 15 000 epochs. The loss printed each epoch is the binary cross-entropy for the last sample processed.
+This example defines its own local `gradient_descent` function (not the library's `gradient_descent_epoch`). The local version performs online updates — one weight update per sample per epoch — for 15 000 epochs, without accuracy tracking. The loss printed each epoch is the binary cross-entropy for the last sample processed.
 
 ```python autoencoder.py
 def gradient_descent(ANN, x, y, epochs):
@@ -225,7 +231,7 @@ plt.show()
 
 ## Image Autoencoder Variant
 
-The same architecture extends naturally to grayscale images. The `autoencoder_images.py` variant loads a JPEG, resizes it to 20×20 pixels, and flattens it to a 400-element vector. The network dimensions scale accordingly:
+The same architecture extends naturally to grayscale images. The `autoencoder_images.py` variant loads a JPEG, resizes it to 20×20 pixels, and flattens it to a 400-element vector. The network dimensions scale accordingly. Unlike the binary autoencoder, this variant calls both `set_weights` and `set_biases` explicitly, using `'normal_random'` for all layers:
 
 ```python autoencoder_images.py
 from ANN import *
@@ -249,16 +255,20 @@ i = InputLayer(x.shape[1], "none")
 
 h1 = HiddenLayer(x.shape[1], "relu")
 h1.attach_after(i)
-h1.set_weights("random")
-h1.set_biases("random")
+h1.set_weights("normal_random")
+h1.set_biases("normal_random")
 
 o = OutputLayer(x.shape[1], "sigmoid", "MSE")
 o.attach_after(h1)
-o.set_weights("random")
-o.set_biases("random")
+o.set_weights("normal_random")
+o.set_biases("normal_random")
 
 ANN = [i, h1, o]
 ```
+
+<Warning>
+The original `autoencoder_images.py` source passes `"random"` to both `set_weights` and `set_biases`. As noted above, `"random"` is not a valid method string in `ANN.py` and leaves both `W` and `Bias` as `None`, causing a crash on `forward()`. The corrected snippet above uses `'normal_random'` instead.
+</Warning>
 
 After training, the reconstructed image is recovered by reshaping the output layer's activations back to the original spatial dimensions:
 
@@ -293,11 +303,13 @@ i = InputLayer(5, "tanh")
 
 h1 = HiddenLayer(3, "tanh")
 h1.attach_after(i)
-h1.set_weights("random")
+h1.set_weights("normal_random")
+h1.set_biases("normal_random")
 
 o = OutputLayer(5, "sigmoid", "bincrossentropy")
 o.attach_after(h1)
-o.set_weights("random")
+o.set_weights("normal_random")
+o.set_biases("normal_random")
 
 ANN = [i, h1, o]
 

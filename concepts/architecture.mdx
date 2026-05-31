@@ -1,7 +1,7 @@
 ---
-title: "Feedforward Network Architecture Explained"
+title: "Neural Network Framework: Feedforward Architecture"
 sidebarTitle: "Architecture"
-description: "Understand how Neural Network Framework models a feedforward network as a linked list of layers, and how data flows forward and backward through the graph."
+description: "Learn how Neural Network Framework models a feedforward network as a Python list of layers, and how data flows forward and backward through each layer."
 ---
 
 Neural Network Framework represents a feedforward (multilayer perceptron) network as an ordinary Python list of layer objects. Each element in that list is either an `InputLayer`, `HiddenLayer`, or `OutputLayer` instance. The framework keeps layers aware of their neighbours through a doubly-linked structure set up at build time, and training is carried out by iterating over that list in the forward direction to produce predictions and in the reverse direction to propagate gradients.

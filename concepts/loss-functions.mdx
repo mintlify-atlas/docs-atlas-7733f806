@@ -1,7 +1,7 @@
 ---
-title: "Loss Functions: MSE, Cross-Entropy, Binary Cross-Entropy"
+title: "Loss Functions: MSE, Binary and Categorical Cross-Entropy"
 sidebarTitle: "Loss Functions"
-description: "The three loss functions in Neural Network Framework — MSE, Binary Cross-Entropy, and Categorical Cross-Entropy. Covers formulas, output activation pairings, and derivatives."
+description: "The three loss functions in Neural Network Framework: MSE, Binary Cross-Entropy, and Categorical Cross-Entropy, with formulas and recommended pairings."
 ---
 
 A loss function measures how far the network's predictions are from the ground-truth labels during training. Neural Network Framework provides three built-in loss functions, selected via the `lossfn` argument of `OutputLayer`. The chosen loss determines both the scalar value returned by `OutputLayer.loss()` and the derivative used as the starting signal for backpropagation. Picking the right loss — and pairing it with the correct output activation — is essential for stable, meaningful training.

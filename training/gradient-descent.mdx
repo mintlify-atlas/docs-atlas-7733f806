@@ -1,7 +1,7 @@
 ---
-title: "Training Neural Networks with Gradient Descent"
+title: "Training Neural Network Framework with Gradient Descent"
 sidebarTitle: "Gradient Descent"
-description: "Learn how to train a Neural Network Framework model using gradient_descent_epoch and gradient_descent_threshold, with full parameter reference and usage examples."
+description: "Train Neural Network Framework models using gradient_descent_epoch and gradient_descent_threshold, with parameter reference and runnable examples."
 ---
 
 Neural Network Framework provides two top-level training functions that implement stochastic gradient descent over a list of layer objects. Both functions handle the full training loop — feeding samples forward, propagating gradients backward, and nudging every weight and bias in the direction that reduces loss. You choose between them based on whether you want to train for a fixed number of passes over your data or stop automatically once the loss crosses a target threshold.
@@ -91,7 +91,7 @@ Neural Network Framework provides two top-level training functions that implemen
   </Tab>
 
   <Tab title="gradient_descent_threshold">
-    `gradient_descent_threshold` runs the training loop indefinitely until the loss on the final sample drops below a target threshold value. It also incorporates a simple early-stopping rule: if the recorded loss starts increasing between consecutive epochs the loop breaks immediately.
+    `gradient_descent_threshold` runs the training loop indefinitely until the loss on the last processed sample drops below a target threshold value. Before entering the loop the function performs an initial forward pass on the first sample (`x[0]`, `y[0]`) so that `ANN[-1].loss()` can be evaluated for the while condition immediately. It also incorporates a simple early-stopping rule: once at least three epoch-loss values have been recorded, if the latest loss is greater than the previous one the loop breaks immediately.
 
     ### Parameters
 
@@ -123,17 +123,17 @@ Neural Network Framework provides two top-level training functions that implemen
 
     ### Early stopping
 
-    In addition to the threshold check, the function monitors the loss list after every epoch and halts if the latest loss is greater than the previous one:
+    In addition to the threshold check, the function monitors the loss list after every epoch. Once at least three epoch-loss values have been recorded (`len(loss) > 2`), it halts immediately if the latest loss is greater than the previous one:
 
     ```python
     if len(loss) > 2 and loss[-1] > loss[-2]:
         break
     ```
 
-    This prevents wasted computation when the optimizer has already passed a local minimum and the loss is climbing again.
+    This guard requires three data points before triggering so that a single noisy epoch does not stop training prematurely. It prevents wasted computation when the optimizer has already passed a local minimum and the loss is climbing.
 
     <Warning>
-      `gradient_descent_threshold` will stop training early if the loss begins to increase between epochs, even if the threshold has not yet been reached. This protects against divergence but means the returned network may not have achieved the target loss. Always inspect the returned `loss` list to verify why training stopped.
+      `gradient_descent_threshold` performs an initial forward pass on `x[0]` / `y[0]` before the while loop so the loss threshold can be checked before any gradient updates. It will also stop training early if the loss increases between consecutive epochs (after at least three epochs have been recorded), even if the threshold has not yet been reached. Always inspect the returned `loss` list to verify why training stopped.
     </Warning>
 
     ### Example

@@ -1,7 +1,7 @@
 ---
 title: "How Backpropagation Works in Neural Network Framework"
 sidebarTitle: "Backpropagation"
-description: "A detailed walkthrough of the backpropagation algorithm as implemented in Neural Network Framework, including gradient computations for output and hidden layers."
+description: "How Neural Network Framework implements backpropagation: gradient derivations for output layers, hidden layers, softmax, and the weight update rule."
 ---
 
 Backpropagation is the algorithm that makes gradient descent practical for multi-layer networks. Starting from the loss value produced at the output, it applies the chain rule of calculus layer by layer in reverse, computing the gradient of the loss with respect to every weight and bias in the network. Neural Network Framework implements this entirely in NumPy: each non-input layer exposes a `backward()` method that reads the activations already computed during the forward pass and stores the resulting gradients as attributes on the layer object. The training functions then read those gradients to update the parameters.

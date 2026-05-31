@@ -1,7 +1,7 @@
 ---
-title: "Activation Functions Reference"
+title: "Neural Network Framework Activation Functions Guide"
 sidebarTitle: "Activations"
-description: "All activation functions available in Neural Network Framework: Sigmoid, ReLU, Tanh, Softmax, and linear. Includes formulas, derivatives, and recommended use cases."
+description: "All five activation functions in Neural Network Framework: Sigmoid, ReLU, Tanh, Softmax, and linear identity. Covers formulas, derivatives, and usage."
 ---
 
 Activation functions introduce the nonlinearity that lets a neural network learn complex mappings. Neural Network Framework ships five built-in activation functions, each identified by a short string key that you pass to a layer constructor. Every hidden layer and the output layer accept an activation string; `InputLayer` also accepts one if you want to transform raw features before they enter the network. This page documents each function, its derivative as used during backpropagation, and guidance on where to use it.
