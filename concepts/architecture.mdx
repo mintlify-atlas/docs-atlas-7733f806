@@ -1,0 +1,157 @@
+---
+title: "Feedforward Network Architecture Explained"
+sidebarTitle: "Architecture"
+description: "Understand how Neural Network Framework models a feedforward network as a linked list of layers, and how data flows forward and backward through the graph."
+---
+
+Neural Network Framework represents a feedforward (multilayer perceptron) network as an ordinary Python list of layer objects. Each element in that list is either an `InputLayer`, `HiddenLayer`, or `OutputLayer` instance. The framework keeps layers aware of their neighbours through a doubly-linked structure set up at build time, and training is carried out by iterating over that list in the forward direction to produce predictions and in the reverse direction to propagate gradients.
+
+## Network as a Python List
+
+The canonical way to hold a network in Neural Network Framework is a plain list:
+
+```python
+ANN = [input_layer, hidden1, hidden2, output_layer]
+```
+
+The list order must match the data-flow order — the first element receives raw input features, and the last element produces the final prediction. There is no special `Model` or `Sequential` wrapper; the list itself **is** the model.
+
+## Linking Layers with `attach_after`
+
+Before a `HiddenLayer` or `OutputLayer` can compute anything it must know which layer feeds it. Calling `attach_after(prev_layer)` establishes this relationship by writing two back-references:
+
+```python
+hidden1.attach_after(input_layer)   # hidden1.previous = input_layer
+                                    # input_layer.next  = hidden1
+hidden2.attach_after(hidden1)
+output_layer.attach_after(hidden2)
+```
+
+After `attach_after` is called, `set_weights` and `set_biases` can be invoked because the layer now knows its own size (`self.length`) **and** the size of its predecessor (`self.previous.length`), which together define the weight-matrix shape `(n_out, n_in)`.
+
+<Note>
+Always call `attach_after` before `set_weights` or `set_biases`. If `previous` is `None` when those methods run, no matrix will be allocated and the subsequent forward pass will raise an `AttributeError`.
+</Note>
+
+## Assembling a 3-Layer Network
+
+The following snippet builds a network with 3 input features, one hidden layer of 4 neurons (ReLU), and a 2-neuron softmax output for binary classification:
+
+```python
+import numpy as np
+from ANN import InputLayer, HiddenLayer, OutputLayer
+
+# 1. Instantiate each layer
+input_layer  = InputLayer(3)
+hidden1      = HiddenLayer(4, actfn='relu')
+output_layer = OutputLayer(2, outputfn='softmax', lossfn='crossentropy')
+
+# 2. Link the layers
+hidden1.attach_after(input_layer)
+output_layer.attach_after(hidden1)
+
+# 3. Initialise weights and biases
+hidden1.set_weights('xavier')
+hidden1.set_biases('zeros')
+output_layer.set_weights('xavier')
+output_layer.set_biases('zeros')
+
+# 4. Collect into a list — this IS the model
+ANN = [input_layer, hidden1, output_layer]
+```
+
+## Forward Pass
+
+During a forward pass every layer reads the `activations` attribute of its predecessor and writes its own computed `activations`. The `InputLayer.forward()` call applies the (optional) input activation directly to the raw values stored via `put_values`.
+
+```python
+# Load one sample and its label
+ANN[0].put_values(x[k])          # store features in InputLayer
+ANN[-1].set_actual(y[k])         # store ground-truth in OutputLayer
+
+# Sweep left → right
+for layer in ANN:
+    layer.forward()
+
+print(ANN[-1].output())           # predictions
+print(ANN[-1].loss())             # scalar loss for this sample
+```
+
+At the end of the sweep `ANN[-1].activations` holds the network's prediction for the current sample.
+
+## Backward Pass
+
+Gradient computation walks the list in **reverse**, starting from the output layer. Each layer computes three quantities and stores them as attributes:
+
+| Attribute | Meaning |
+|-----------|---------|
+| `dLda`    | Gradient of the loss with respect to this layer's pre-activation output (used by the layer to the left) |
+| `dLdW`    | Gradient of the loss with respect to this layer's weight matrix |
+
+The `InputLayer` has no weights and no `backward` method — the loop therefore starts at `len(ANN)-1` and stops **before** index `0`:
+
+```python
+for i in range(len(ANN) - 1, 0, -1):
+    ANN[i].backward()
+```
+
+## Weight Update (Gradient Descent)
+
+After gradients have been computed for every layer, weights and biases are nudged in the direction that reduces the loss:
+
+```python
+eta = 0.01  # learning rate
+
+for i in range(1, len(ANN)):
+    ANN[i].W    -= eta * ANN[i].dLdW
+    ANN[i].Bias -= eta * ANN[i].dLda.reshape(1, -1)
+```
+
+The update loop also starts at index `1` to skip the `InputLayer`, which owns no weight matrix.
+
+## Full Training Loop
+
+Putting all the pieces together, a bare-bones epoch loop looks like this:
+
+```python
+epochs = 100
+eta    = 0.01
+losses = []
+
+for epoch in range(epochs):
+    for k in range(len(x_train)):
+        # --- forward ---
+        ANN[0].put_values(x_train[k])
+        ANN[-1].set_actual(y_train[k])
+        for layer in ANN:
+            layer.forward()
+
+        # --- backward ---
+        for i in range(len(ANN) - 1, 0, -1):
+            ANN[i].backward()
+
+        # --- update ---
+        for i in range(1, len(ANN)):
+            ANN[i].W    -= eta * ANN[i].dLdW
+            ANN[i].Bias -= eta * ANN[i].dLda.reshape(1, -1)
+
+    losses.append(ANN[-1].loss())
+    print(f"Epoch {epoch}  loss={ANN[-1].loss():.6f}")
+```
+
+The framework also ships two convenience training functions — `gradient_descent_epoch` (fixed number of epochs) and `gradient_descent_threshold` (stops when loss drops below a threshold) — that implement exactly this loop.
+
+## Data Flow Diagram
+
+```
+ ┌──────────────┐   forward()   ┌──────────────┐   forward()   ┌──────────────┐
+ │  InputLayer  │ ────────────► │  HiddenLayer │ ────────────► │ OutputLayer  │
+ │  activations │               │  activations │               │  activations │
+ └──────────────┘               └──────────────┘               └──────────────┘
+        ▲                              ▲                               │
+        │         backward()           │         backward()            │
+        └──────────────────────────────┴───────────────────────────────┘
+                                  (gradients flow right → left)
+```
+
+Each `forward()` call pushes activations one step to the right. Each `backward()` call pulls gradients one step to the left. The weight update then consumes those gradients in place.

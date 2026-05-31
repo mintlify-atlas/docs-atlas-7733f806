@@ -1,0 +1,434 @@
+---
+title: "Binary Autoencoder: Compress and Reconstruct Bit Vectors"
+sidebarTitle: "Autoencoder"
+description: "Build a binary autoencoder with Neural Network Framework that compresses 5-bit vectors into a 3-neuron hidden layer and reconstructs them with binary cross-entropy loss."
+---
+
+An autoencoder is a neural network that learns to compress its input into a lower-dimensional representation and then reconstruct it as accurately as possible. The first half of the network — the *encoder* — maps the original input down to a compact hidden state called the *bottleneck*. The second half — the *decoder* — maps that bottleneck representation back to the original space. By forcing information through a narrower channel, the network must learn the most important structure in the data. This example uses Neural Network Framework to build a binary autoencoder that compresses all 32 possible 5-bit sequences through a 3-neuron bottleneck and reconstructs them using binary cross-entropy loss.
+
+## Network Architecture
+
+The autoencoder is a symmetric 3-layer network:
+
+| Layer | Type | Neurons | Activation | Role |
+|---|---|---|---|---|
+| `InputLayer(5, 'tanh')` | Input | 5 | Tanh | Receives 5-bit input |
+| `HiddenLayer(3, 'tanh')` | Hidden | 3 | Tanh | Bottleneck encoder |
+| `OutputLayer(5, 'sigmoid', 'bincrossentropy')` | Output | 5 | Sigmoid | Reconstructed output |
+
+<Note>
+The hidden layer has only **3 neurons** while the input and output each have **5**. This bottleneck forces the network to learn a compressed 3-dimensional encoding of every 5-bit pattern. It cannot simply copy the input — it must discover a compact internal representation that captures all 32 distinct patterns.
+</Note>
+
+## Why Binary Cross-Entropy?
+
+The target values are binary (0 or 1), and the output layer uses sigmoid activation to produce values in the range `(0, 1)`. Binary cross-entropy loss is the natural choice here: it treats each output bit as an independent Bernoulli variable and penalizes confident wrong predictions heavily. MSE would work but converges more slowly on binary reconstruction tasks because its gradient near 0 and 1 is small.
+
+## Training Data
+
+The dataset is every possible 5-bit combination — all 32 sequences from `[0,0,0,0,0]` to `[1,1,1,1,1]`. Because the autoencoder's target is identical to its input, `y` is simply a copy of `x`. Training on the complete binary space means the bottleneck must generalize to all patterns simultaneously.
+
+<Steps>
+
+### Define the network
+
+Create the three-layer autoencoder and assign random initial weights. Note that biases are not explicitly set here; the network relies on the default random weight initialization from `set_weights("random")`.
+
+```python autoencoder.py
+from ANN import *
+import matplotlib.pyplot as plt
+
+eta = 0.001
+
+i = InputLayer(5, "tanh")
+
+h1 = HiddenLayer(3, "tanh")
+h1.attach_after(i)
+h1.set_weights("random")
+
+o = OutputLayer(5, "sigmoid", "bincrossentropy")
+o.attach_after(h1)
+o.set_weights("random")
+
+ANN = [i, h1, o]
+```
+
+### Prepare the training data
+
+Define all 32 binary sequences. Both `x` and `y` are the same array — the autoencoder's job is to reconstruct its own input.
+
+```python autoencoder.py
+x = np.array([
+  [0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 1],
+  [0, 0, 0, 1, 0],
+  [0, 0, 0, 1, 1],
+  [0, 0, 1, 0, 0],
+  [0, 0, 1, 0, 1],
+  [0, 0, 1, 1, 0],
+  [0, 0, 1, 1, 1],
+  [0, 1, 0, 0, 0],
+  [0, 1, 0, 0, 1],
+  [0, 1, 0, 1, 0],
+  [0, 1, 0, 1, 1],
+  [0, 1, 1, 0, 0],
+  [0, 1, 1, 0, 1],
+  [0, 1, 1, 1, 0],
+  [0, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0],
+  [1, 0, 0, 0, 1],
+  [1, 0, 0, 1, 0],
+  [1, 0, 0, 1, 1],
+  [1, 0, 1, 0, 0],
+  [1, 0, 1, 0, 1],
+  [1, 0, 1, 1, 0],
+  [1, 0, 1, 1, 1],
+  [1, 1, 0, 0, 0],
+  [1, 1, 0, 0, 1],
+  [1, 1, 0, 1, 0],
+  [1, 1, 0, 1, 1],
+  [1, 1, 1, 0, 0],
+  [1, 1, 1, 0, 1],
+  [1, 1, 1, 1, 0],
+  [1, 1, 1, 1, 1],
+])
+y = np.array([
+  [0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 1],
+  [0, 0, 0, 1, 0],
+  [0, 0, 0, 1, 1],
+  [0, 0, 1, 0, 0],
+  [0, 0, 1, 0, 1],
+  [0, 0, 1, 1, 0],
+  [0, 0, 1, 1, 1],
+  [0, 1, 0, 0, 0],
+  [0, 1, 0, 0, 1],
+  [0, 1, 0, 1, 0],
+  [0, 1, 0, 1, 1],
+  [0, 1, 1, 0, 0],
+  [0, 1, 1, 0, 1],
+  [0, 1, 1, 1, 0],
+  [0, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0],
+  [1, 0, 0, 0, 1],
+  [1, 0, 0, 1, 0],
+  [1, 0, 0, 1, 1],
+  [1, 0, 1, 0, 0],
+  [1, 0, 1, 0, 1],
+  [1, 0, 1, 1, 0],
+  [1, 0, 1, 1, 1],
+  [1, 1, 0, 0, 0],
+  [1, 1, 0, 0, 1],
+  [1, 1, 0, 1, 0],
+  [1, 1, 0, 1, 1],
+  [1, 1, 1, 0, 0],
+  [1, 1, 1, 0, 1],
+  [1, 1, 1, 1, 0],
+  [1, 1, 1, 1, 1]
+])
+```
+
+### Train with gradient descent
+
+The local `gradient_descent` function runs online updates — one weight update per sample per epoch — for 15 000 epochs. The loss printed each epoch is the binary cross-entropy for the last sample processed.
+
+```python autoencoder.py
+def gradient_descent(ANN, x, y, epochs):
+  loss = []
+  for j in range(0, epochs):
+    for k in range(0, len(x)):
+      ANN[0].put_values(x[k])
+      ANN[len(ANN)-1].set_actual(y[k])
+
+      for layer in ANN:
+        layer.forward()
+
+      for i in range(len(ANN)-1, 0, -1):
+        ANN[i].backward()
+
+      for i in range(1, len(ANN)):
+        ANN[i].W -= eta * ANN[i].dLdW
+        ANN[i].Bias -= eta * ANN[i].dLda.reshape(1, -1)
+
+    loss.append(ANN[len(ANN)-1].loss())
+
+    print(f"epoch: {j}, Loss: {ANN[len(ANN)-1].loss()}")
+  return ANN, loss
+
+
+ANN, loss = gradient_descent(ANN, x, y, 15000)
+plt.plot(loss)
+plt.show()
+```
+
+<Tip>
+The learning rate `eta = 0.001` is intentionally conservative. Binary cross-entropy gradients can be steep early in training, and a rate that is too high will cause the loss to oscillate or diverge.
+</Tip>
+
+### Visualize reconstructions and learned encodings
+
+After training, run each input through the network and collect both the reconstructed output (`ANN[2].activations`) and the hidden bottleneck representation (`ANN[1].activations`). Then plot all three side by side for every sample.
+
+```python autoencoder.py
+def visualize_binary_sequence(sequence, title, ax, len):
+    ax.set_title(title)
+    im = ax.imshow(sequence.reshape(len, -1), cmap='binary')
+    plt.colorbar(im, ax=ax)
+    im.set_clim(0, 1)
+
+
+outputs = []
+hiddens = []
+
+for j in range(0, len(x)):
+  ANN[0].put_values(x[j])
+  for layer in ANN:
+    layer.forward()
+  output = ANN[len(ANN)-1].output()
+  outputs.append(output)
+  hidden = ANN[1].activations
+  hiddens.append(hidden)
+
+
+num_samples = len(x)
+fig, axs = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
+
+for j in range(num_samples):
+    visualize_binary_sequence(x[j], f"Input {j} - Actual: {y[j]}", axs[j][0], ANN[0].length)
+    visualize_binary_sequence(outputs[j], f"Predicted Output", axs[j][1], ANN[2].length)
+    visualize_binary_sequence(hiddens[j], f"Hidden Layer", axs[j][2], ANN[1].length)
+
+plt.tight_layout()
+plt.show()
+```
+
+Each row shows the original 5-bit vector (left), the reconstructed output (center), and the 3-neuron hidden layer activation — the learned compressed code (right).
+
+### Inspect encoder and decoder weight matrices
+
+The weight matrices of the hidden and output layers are the learned encoder and decoder, respectively. Plotting them as heatmaps reveals which input bits each bottleneck neuron responds to, and how the decoder maps bottleneck values back to output bits.
+
+```python autoencoder.py
+plt.imshow(ANN[1].W, cmap='cividis')
+plt.title("Encoder Weight Matrix")
+plt.show()
+
+plt.imshow(ANN[2].W, cmap='cividis')
+plt.colorbar()
+plt.title("Decoder Weight Matrix")
+plt.show()
+```
+
+`ANN[1].W` has shape `(3, 5)` — 3 bottleneck neurons, each with 5 input weights (the encoder). `ANN[2].W` has shape `(5, 3)` — 5 output neurons, each with 3 bottleneck weights (the decoder).
+
+</Steps>
+
+## Image Autoencoder Variant
+
+The same architecture extends naturally to grayscale images. The `autoencoder_images.py` variant loads a JPEG, resizes it to 20×20 pixels, and flattens it to a 400-element vector. The network dimensions scale accordingly:
+
+```python autoencoder_images.py
+from ANN import *
+from PIL import Image
+
+input_image = Image.open('image1.jpg').convert('L').resize((20, 20))
+output_image = Image.open('image1.jpg').convert('L').resize((20, 20))
+
+input_array = np.array(input_image) / 255.0
+output_array = np.array(output_image) / 255.0
+
+input_flat = input_array.flatten()
+output_flat = output_array.flatten()
+
+x = np.array([input_flat])
+y = np.array([output_flat])
+
+eta = 0.001
+
+i = InputLayer(x.shape[1], "none")
+
+h1 = HiddenLayer(x.shape[1], "relu")
+h1.attach_after(i)
+h1.set_weights("random")
+h1.set_biases("random")
+
+o = OutputLayer(x.shape[1], "sigmoid", "MSE")
+o.attach_after(h1)
+o.set_weights("random")
+o.set_biases("random")
+
+ANN = [i, h1, o]
+```
+
+After training, the reconstructed image is recovered by reshaping the output layer's activations back to the original spatial dimensions:
+
+```python autoencoder_images.py
+imagenew = ANN[2].activations.reshape(input_array.shape)
+plt.imshow(imagenew, cmap='gray')
+plt.show()
+```
+
+<Note>
+The image autoencoder uses MSE loss and a same-size hidden layer (no compression) — its purpose is pixel-level reconstruction fidelity rather than dimensionality reduction. To add compression, reduce `HiddenLayer` neurons below `x.shape[1]`.
+</Note>
+
+## Full Source
+
+```python autoencoder.py
+#import here
+import numpy as np
+from ANN import *
+import matplotlib.pyplot as plt
+
+def visualize_binary_sequence(sequence, title, ax, len):
+    ax.set_title(title)
+    im = ax.imshow(sequence.reshape(len, -1), cmap='binary')
+    plt.colorbar(im, ax=ax)
+    im.set_clim(0, 1)
+
+
+eta = 0.001
+
+i = InputLayer(5, "tanh")
+
+h1 = HiddenLayer(3, "tanh")
+h1.attach_after(i)
+h1.set_weights("random")
+
+o = OutputLayer(5, "sigmoid", "bincrossentropy")
+o.attach_after(h1)
+o.set_weights("random")
+
+ANN = [i, h1, o]
+
+x = np.array([
+  [0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 1],
+  [0, 0, 0, 1, 0],
+  [0, 0, 0, 1, 1],
+  [0, 0, 1, 0, 0],
+  [0, 0, 1, 0, 1],
+  [0, 0, 1, 1, 0],
+  [0, 0, 1, 1, 1],
+  [0, 1, 0, 0, 0],
+  [0, 1, 0, 0, 1],
+  [0, 1, 0, 1, 0],
+  [0, 1, 0, 1, 1],
+  [0, 1, 1, 0, 0],
+  [0, 1, 1, 0, 1],
+  [0, 1, 1, 1, 0],
+  [0, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0],
+  [1, 0, 0, 0, 1],
+  [1, 0, 0, 1, 0],
+  [1, 0, 0, 1, 1],
+  [1, 0, 1, 0, 0],
+  [1, 0, 1, 0, 1],
+  [1, 0, 1, 1, 0],
+  [1, 0, 1, 1, 1],
+  [1, 1, 0, 0, 0],
+  [1, 1, 0, 0, 1],
+  [1, 1, 0, 1, 0],
+  [1, 1, 0, 1, 1],
+  [1, 1, 1, 0, 0],
+  [1, 1, 1, 0, 1],
+  [1, 1, 1, 1, 0],
+  [1, 1, 1, 1, 1],
+])
+y = np.array([
+  [0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 1],
+  [0, 0, 0, 1, 0],
+  [0, 0, 0, 1, 1],
+  [0, 0, 1, 0, 0],
+  [0, 0, 1, 0, 1],
+  [0, 0, 1, 1, 0],
+  [0, 0, 1, 1, 1],
+  [0, 1, 0, 0, 0],
+  [0, 1, 0, 0, 1],
+  [0, 1, 0, 1, 0],
+  [0, 1, 0, 1, 1],
+  [0, 1, 1, 0, 0],
+  [0, 1, 1, 0, 1],
+  [0, 1, 1, 1, 0],
+  [0, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0],
+  [1, 0, 0, 0, 1],
+  [1, 0, 0, 1, 0],
+  [1, 0, 0, 1, 1],
+  [1, 0, 1, 0, 0],
+  [1, 0, 1, 0, 1],
+  [1, 0, 1, 1, 0],
+  [1, 0, 1, 1, 1],
+  [1, 1, 0, 0, 0],
+  [1, 1, 0, 0, 1],
+  [1, 1, 0, 1, 0],
+  [1, 1, 0, 1, 1],
+  [1, 1, 1, 0, 0],
+  [1, 1, 1, 0, 1],
+  [1, 1, 1, 1, 0],
+  [1, 1, 1, 1, 1]
+])
+
+
+def gradient_descent(ANN, x, y, epochs):
+  loss = []
+  for j in range(0, epochs):
+    for k in range(0, len(x)):
+      ANN[0].put_values(x[k])
+      ANN[len(ANN)-1].set_actual(y[k])
+
+      for layer in ANN:
+        layer.forward()
+
+      for i in range(len(ANN)-1, 0, -1):
+        ANN[i].backward()
+
+      for i in range(1, len(ANN)):
+        ANN[i].W -= eta * ANN[i].dLdW
+        ANN[i].Bias -= eta * ANN[i].dLda.reshape(1, -1)
+
+    loss.append(ANN[len(ANN)-1].loss())
+
+    print(f"epoch: {j}, Loss: {ANN[len(ANN)-1].loss()}")
+  return ANN, loss
+
+
+ANN, loss = gradient_descent(ANN, x, y, 15000)
+plt.plot(loss)
+plt.show()
+
+outputs = []
+hiddens = []
+
+for j in range(0, len(x)):
+  ANN[0].put_values(x[j])
+  for layer in ANN:
+    layer.forward()
+  output = ANN[len(ANN)-1].output()
+  outputs.append(output)
+  hidden = ANN[1].activations
+  hiddens.append(hidden)
+
+
+num_samples = len(x)
+fig, axs = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
+
+for j in range(num_samples):
+    visualize_binary_sequence(x[j], f"Input {j} - Actual: {y[j]}", axs[j][0], ANN[0].length)
+    visualize_binary_sequence(outputs[j], f"Predicted Output", axs[j][1], ANN[2].length)
+    visualize_binary_sequence(hiddens[j], f"Hidden Layer", axs[j][2], ANN[1].length)
+
+plt.tight_layout()
+plt.show()
+
+
+plt.imshow(ANN[1].W, cmap='cividis')
+plt.title("Encoder Weight Matrix")
+plt.show()
+
+plt.imshow(ANN[2].W, cmap='cividis')
+plt.colorbar()
+plt.title("Decoder Weight Matrix")
+plt.show()
+```

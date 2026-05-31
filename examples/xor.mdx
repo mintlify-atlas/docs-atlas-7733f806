@@ -1,0 +1,220 @@
+---
+title: "XOR Classification with a 3-Layer Neural Network"
+sidebarTitle: "XOR"
+description: "Step-by-step walkthrough of training a feedforward neural network to solve the XOR problem using Neural Network Framework and gradient descent."
+---
+
+The XOR problem is one of the most iconic benchmarks in neural network history. A single-layer perceptron cannot solve it because XOR is not linearly separable — no single straight line can correctly divide the four input combinations into the right classes. Adding one hidden layer gives the network the expressive power it needs to learn the non-linear decision boundary, making XOR an ideal first test for any feedforward architecture. This walkthrough uses Neural Network Framework to build, train, and evaluate a minimal 3-layer network that learns XOR from scratch using vanilla gradient descent.
+
+## Network Architecture
+
+The network has three layers arranged in a chain:
+
+| Layer | Type | Neurons | Activation |
+|---|---|---|---|
+| `InputLayer(2, 'sigmoid')` | Input | 2 | Sigmoid |
+| `HiddenLayer(2, 'sigmoid')` | Hidden | 2 | Sigmoid |
+| `OutputLayer(1, 'none', 'MSE')` | Output | 1 | None (linear) |
+
+The two input neurons receive a pair of binary values. The two hidden neurons apply sigmoid activations to introduce non-linearity. The single output neuron uses a linear activation and is trained with Mean Squared Error (MSE) loss, making the output a continuous value near 0 or 1.
+
+## Training Data
+
+The full XOR truth table serves as the training set — all four possible input combinations and their expected outputs:
+
+| Input A | Input B | XOR Output |
+|---|---|---|
+| 0 | 0 | 0 |
+| 0 | 1 | 1 |
+| 1 | 0 | 1 |
+| 1 | 1 | 0 |
+
+With only four samples, every epoch runs through the entire dataset. The network updates weights after each individual sample (online learning), cycling through all four inputs per epoch.
+
+<Steps>
+
+### Define the network layers
+
+Create an `InputLayer` with 2 neurons and sigmoid activation, then attach a `HiddenLayer` with 2 neurons and sigmoid activation. Attach the `OutputLayer` with 1 neuron, linear activation, and MSE loss. Collect the layers in a list to form the `ANN` pipeline.
+
+```python xor.py
+from ANN import *
+
+eta = 0.1
+
+i = InputLayer(2, "sigmoid")
+
+h1 = HiddenLayer(2, "sigmoid")
+h1.attach_after(i)
+h1.set_weights("random")
+
+o = OutputLayer(1, "none", "MSE")
+o.attach_after(h1)
+o.set_weights("random")
+
+ANN = [i, h1, o]
+```
+
+<Tip>
+`attach_after` sets the `previous` pointer on the new layer and the `next` pointer on the preceding one — both are required for the forward and backward passes to chain correctly.
+</Tip>
+
+### Prepare training data
+
+Define the four XOR input–output pairs as NumPy arrays. The inputs `x` are shape `(4, 2)` and the targets `y` are shape `(4, 1)`.
+
+```python xor.py
+x = np.array([
+  [0, 0],
+  [0, 1],
+  [1, 0],
+  [1, 1]
+])
+y = np.array([
+  [0],
+  [1],
+  [1],
+  [0]
+])
+```
+
+### Define and run the gradient descent loop
+
+The `gradient_descent` function iterates for a fixed number of epochs. Each epoch loops over every sample: it runs a full forward pass through `ANN`, then a backward pass from the last layer to the first, and finally updates every weight matrix `W` and bias vector `Bias` by the gradient scaled with the learning rate `eta`.
+
+```python xor.py
+def gradient_descent(ANN, x, y, epochs):
+  loss = []
+  for j in range(0, epochs):
+    for k in range(0, len(x)):
+      ANN[0].put_values(x[k])
+      ANN[len(ANN)-1].set_actual(y[k])
+
+      for layer in ANN:
+        layer.forward()
+
+      for i in range(len(ANN)-1, 0, -1):
+        ANN[i].backward()
+
+      for i in range(1, len(ANN)):
+        ANN[i].W -= eta * ANN[i].dLdW
+        ANN[i].Bias -= eta * ANN[i].dLda.reshape(1, -1)
+
+    loss.append(ANN[len(ANN)-1].loss())
+
+    print(f"epoch: {j}, Loss: {ANN[len(ANN)-1].loss()}")
+  return ANN, loss
+
+
+ANN, loss = gradient_descent(ANN, x, y, 50000)
+```
+
+The training loop runs for **50 000 epochs**. With a learning rate of `0.1` and only four samples, this typically converges well within that budget.
+
+### Plot the loss curve
+
+After training, visualize convergence by plotting the recorded loss values:
+
+```python xor.py
+plt.plot(loss)
+plt.show()
+```
+
+A healthy XOR loss curve drops steeply in the first few thousand epochs and then flattens out close to zero. If the curve plateaus at a high value, re-run — random weight initialization can occasionally start in a poor basin.
+
+### Evaluate predictions
+
+Feed each of the four inputs back through the trained network and print the predicted output alongside the known ground truth:
+
+```python xor.py
+for j in range(0, len(x)):
+  ANN[0].put_values(x[j])
+  for layer in ANN:
+    layer.forward()
+  output = ANN[len(ANN)-1].output()
+
+  print(f"actual: {y[j]}, predicted: {output}")
+```
+
+</Steps>
+
+## Expected Results
+
+After approximately 50 000 epochs the network should produce outputs very close to the ground truth:
+
+```
+actual: [0], predicted: [[0.02...]]
+actual: [1], predicted: [[0.97...]]
+actual: [1], predicted: [[0.97...]]
+actual: [0], predicted: [[0.03...]]
+```
+
+The output is a continuous value, not a hard binary decision. Round to the nearest integer to recover the binary label. Exact values vary with random initialization, but a well-converged run will keep all four predictions within about 0.05 of the correct target.
+
+## Full Source
+
+```python xor.py
+from ANN import *
+
+eta = 0.1
+
+i = InputLayer(2, "sigmoid")
+
+h1 = HiddenLayer(2, "sigmoid")
+h1.attach_after(i)
+h1.set_weights("random")
+
+o = OutputLayer(1, "none", "MSE")
+o.attach_after(h1)
+o.set_weights("random")
+
+ANN = [i, h1, o]
+
+x = np.array([
+  [0, 0],
+  [0, 1],
+  [1, 0],
+  [1, 1]
+])
+y = np.array([
+  [0],
+  [1],
+  [1],
+  [0]
+])
+
+def gradient_descent(ANN, x, y, epochs):
+  loss = []
+  for j in range(0, epochs):
+    for k in range(0, len(x)):
+      ANN[0].put_values(x[k])
+      ANN[len(ANN)-1].set_actual(y[k])
+
+      for layer in ANN:
+        layer.forward()
+
+      for i in range(len(ANN)-1, 0, -1):
+        ANN[i].backward()
+
+      for i in range(1, len(ANN)):
+        ANN[i].W -= eta * ANN[i].dLdW
+        ANN[i].Bias -= eta * ANN[i].dLda.reshape(1, -1)
+
+    loss.append(ANN[len(ANN)-1].loss())
+
+    print(f"epoch: {j}, Loss: {ANN[len(ANN)-1].loss()}")
+  return ANN, loss
+
+
+ANN, loss = gradient_descent(ANN, x, y, 50000)
+plt.plot(loss)
+plt.show()
+
+for j in range(0, len(x)):
+  ANN[0].put_values(x[j])
+  for layer in ANN:
+    layer.forward()
+  output = ANN[len(ANN)-1].output()
+
+  print(f"actual: {y[j]}, predicted: {output}")
+```

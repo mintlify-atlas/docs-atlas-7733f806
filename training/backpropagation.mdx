@@ -1,0 +1,221 @@
+---
+title: "How Backpropagation Works in Neural Network Framework"
+sidebarTitle: "Backpropagation"
+description: "A detailed walkthrough of the backpropagation algorithm as implemented in Neural Network Framework, including gradient computations for output and hidden layers."
+---
+
+Backpropagation is the algorithm that makes gradient descent practical for multi-layer networks. Starting from the loss value produced at the output, it applies the chain rule of calculus layer by layer in reverse, computing the gradient of the loss with respect to every weight and bias in the network. Neural Network Framework implements this entirely in NumPy: each non-input layer exposes a `backward()` method that reads the activations already computed during the forward pass and stores the resulting gradients as attributes on the layer object. The training functions then read those gradients to update the parameters.
+
+## The Forward-Backward-Update Cycle
+
+Each training step for a single sample passes through three phases: a forward pass that computes predictions, a backward pass that computes gradients, and a parameter update step that applies those gradients.
+
+<Steps>
+  <Step title="Load the sample and run the forward pass">
+    The input sample is loaded into the `InputLayer` using `put_values`, the expected output is registered on the `OutputLayer` with `set_actual`, and then every layer's `forward()` method is called in order from input to output. After this step every layer holds `pre_activations` and `activations`.
+
+    ```python
+    ANN[0].put_values(x[k])
+    ANN[-1].set_actual(y[k])
+
+    for layer in ANN:
+        layer.forward()
+    ```
+  </Step>
+
+  <Step title="Run the backward pass in reverse">
+    Every layer except the `InputLayer` is visited in reverse order — from the output layer back through the hidden layers — and its `backward()` method is called. Each call reads gradients from the next layer (or from the loss function, in the output layer's case) and deposits its own gradients on `self.dLda` and `self.dLdW`.
+
+    ```python
+    for i in range(len(ANN) - 1, 0, -1):
+        ANN[i].backward()
+    ```
+  </Step>
+
+  <Step title="Update weights and biases">
+    With all gradients available, each non-input layer's parameters are shifted opposite to the gradient direction, scaled by the learning rate `eta`.
+
+    ```python
+    for i in range(1, len(ANN)):
+        ANN[i].W    -= eta * ANN[i].dLdW
+        ANN[i].Bias -= eta * ANN[i].dLda.reshape(1, -1)
+    ```
+  </Step>
+</Steps>
+
+## OutputLayer.backward()
+
+The `OutputLayer` sits at the end of the network and is the only layer with direct access to the loss function. Its `backward()` method is therefore responsible for computing the very first gradient in the chain — the derivative of the loss with respect to the layer's own pre-activation values.
+
+### Step-by-step derivation
+
+**1. Loss derivative `dLdy`**
+
+The derivative of the loss with respect to the output activations is computed by the loss function's own derivative. For example, with Mean Squared Error:
+
+```python
+# Inside OutputLayer.backward() — MSE branch
+dLdy = MSE_Derivative(self.activations, self.actual)
+```
+
+For binary cross-entropy or categorical cross-entropy the corresponding derivative function is called instead. The result `dLdy` measures how much the loss changes as each output value changes.
+
+**2. Activation derivative `dyda`**
+
+The local gradient of the output activation function with respect to the pre-activation (the raw dot-product result before the activation is applied):
+
+```python
+# Sigmoid output activation
+dyda = sigmoid_derivative(self.pre_activations[0])
+
+# ReLU output activation
+dyda = ReLUDerivative(self.pre_activations[0])
+```
+
+**3. Combined gradient `dLda`**
+
+For all activation functions except softmax, the two derivatives are multiplied element-wise via the chain rule:
+
+```python
+dyda  = dyda.reshape(-1, 1)
+dLda  = dLdy * dyda
+```
+
+**4. Weight gradient `dLdW`**
+
+The gradient of the loss with respect to the weight matrix is the outer product of `dLda` and the activations from the previous layer:
+
+```python
+dadW = self.previous.activations.reshape(-1, 1)
+dLdW = np.dot(dLda, dadW.T)
+```
+
+**5. Stored attributes**
+
+After `backward()` returns, the following attributes are available on the `OutputLayer` object:
+
+| Attribute | Shape | Meaning |
+|---|---|---|
+| `self.dLdy` | scalar or `(n_out, 1)` | Derivative of loss w.r.t. output activations |
+| `self.dyda` | `(n_out, 1)` | Derivative of output activation w.r.t. pre-activations |
+| `self.dLda` | `(n_out, 1)` | Combined gradient: `dLdy * dyda` |
+| `self.dLdW` | `(n_out, n_prev)` | Gradient of loss w.r.t. this layer's weight matrix |
+
+### Softmax special case
+
+When the output activation is `softmax` the standard element-wise multiplication does not apply because softmax couples all output neurons together. The framework uses the well-known simplification valid when softmax is paired with cross-entropy loss — the gradient collapses to the difference between predicted probabilities and the one-hot target:
+
+```python
+# Softmax + cross-entropy simplified gradient
+dLda = self.activations - self.actual
+dLda = dLda.reshape(-1, 1)
+```
+
+This avoids constructing the full Jacobian of the softmax function and is numerically more stable.
+
+## HiddenLayer.backward()
+
+Hidden layers sit between the input and output and have no direct connection to the loss. They receive their incoming gradient signal by reading `dLda` and `W` from the layer immediately after them (the "next" layer), then compute their own gradients using the chain rule.
+
+### Step-by-step derivation
+
+**1. Gradient from the next layer `dLdh`**
+
+The gradient of the loss with respect to this layer's activations is obtained by projecting the next layer's `dLda` back through the next layer's weight matrix:
+
+```python
+nextdLda = self.next.dLda   # gradient stored by the layer ahead
+dadh     = self.next.W      # weight matrix of the layer ahead
+
+dLdh = np.dot(dadh.T, nextdLda)
+```
+
+**2. Local activation derivative `dhda`**
+
+The derivative of this layer's activation function with respect to its own pre-activations:
+
+```python
+# ReLU hidden layer
+dhda = ReLUDerivative(self.pre_activations)
+
+# Sigmoid hidden layer
+dhda = sigmoid_derivative(self.pre_activations)
+
+# Tanh hidden layer
+dhda = TanhDerivative(self.pre_activations)
+```
+
+**3. Combined gradient `dLda`**
+
+Element-wise product of the back-propagated signal and the local derivative:
+
+```python
+dhda = dhda.reshape(-1, 1)
+dLda = np.multiply(dLdh, dhda)
+```
+
+**4. Weight gradient `dLdW`**
+
+Outer product of `dLda` and this layer's input activations (the previous layer's activations):
+
+```python
+dadW = self.previous.activations.reshape(-1, 1)
+dLdW = np.dot(dLda, dadW.T)
+```
+
+**5. Stored attributes**
+
+After `backward()` returns:
+
+| Attribute | Shape | Meaning |
+|---|---|---|
+| `self.dLda` | `(n_hidden, 1)` | Gradient of loss w.r.t. this layer's pre-activations |
+| `self.dLdW` | `(n_hidden, n_prev)` | Gradient of loss w.r.t. this layer's weight matrix |
+
+These are then consumed by the weight update step and, for layers further back in the network, by the `backward()` call on the preceding hidden layer.
+
+<Note>
+  `InputLayer` has no `backward()` method and is intentionally skipped during the backward pass. The input layer holds no learnable parameters — it simply stores the raw input values and passes them forward. The backward loop `for i in range(len(ANN) - 1, 0, -1)` uses a lower bound of `1` (not `0`) precisely to exclude index `0`, which is always the `InputLayer`.
+</Note>
+
+## Gradient Flow Summary
+
+The diagram below traces how the loss gradient flows from the output back to the first hidden layer for a network with one hidden layer:
+
+```
+Loss
+ │
+ ▼  OutputLayer.backward()
+dLdy = loss_derivative(activations, actual)
+dyda = activation_derivative(pre_activations)
+dLda = dLdy * dyda                        ← stored on OutputLayer
+dLdW = dLda @ previous.activations.T     ← stored on OutputLayer
+ │
+ │  (dLda and W are read by the layer behind)
+ ▼  HiddenLayer.backward()
+dLdh = next.W.T @ next.dLda              ← signal from OutputLayer
+dhda = activation_derivative(pre_activations)
+dLda = dLdh * dhda                        ← stored on HiddenLayer
+dLdW = dLda @ previous.activations.T     ← stored on HiddenLayer
+```
+
+Each layer stores exactly what the layer behind it needs (`dLda` and `W`), so the backward pass never needs to revisit a layer it has already processed.
+
+## Supported Activation Derivatives
+
+The following derivative functions are available and are selected automatically by each layer's `backward()` method based on the `actname` attribute set at construction time:
+
+```python
+def sigmoid_derivative(x):
+    sigmoid_x = SigmoidActivation(x)
+    return sigmoid_x * (1 - sigmoid_x)
+
+def ReLUDerivative(x):
+    return np.where(x <= 0, 0, 1)
+
+def TanhDerivative(x):
+    return 1 - np.tanh(x) ** 2
+
+def noActDerivative(x):
+    return np.ones((1, len(x)))   # identity activation — gradient is 1 everywhere
+```

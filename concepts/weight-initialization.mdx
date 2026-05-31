@@ -1,0 +1,248 @@
+---
+title: "Weight and Bias Initialization Methods"
+sidebarTitle: "Weight Init"
+description: "All weight and bias initialization strategies in Neural Network Framework: normal random, uniform random, Xavier, He, LeCun, and constant initializers."
+---
+
+Weight and bias initialisation is one of the most consequential decisions when building a neural network. Poor initialisation can cause gradients to vanish or explode during the very first backpropagation step, leaving the network unable to learn. Neural Network Framework exposes a set of principled initialisation strategies through the `set_weights(method)` and `set_biases(method)` methods available on `HiddenLayer` and `OutputLayer`. This page lists every supported method string, the formula or distribution it uses, and guidance on when to apply it.
+
+<Note>
+`InputLayer` does not own a weight matrix or bias vector and therefore has no `set_weights` or `set_biases` method. Calling either on an `InputLayer` instance will raise an `AttributeError`.
+</Note>
+
+---
+
+## Weight Initialisation Methods
+
+Call `layer.set_weights(method)` after `layer.attach_after(prev_layer)` has been called. The matrix shape is always `(self.length, self.previous.length)` — that is, `(n_out, n_in)`.
+
+<Accordion title="'normal_random' — Standard Normal">
+
+Draws each weight from a standard normal distribution with mean 0 and variance 1.
+
+```python
+layer.set_weights('normal_random')
+```
+
+```python
+self.W = np.random.randn(n_out, n_in)
+```
+
+**When to use:** A quick baseline. Not recommended for deep networks — the variance grows with `n_in`, making deep layers prone to exploding activations.
+
+</Accordion>
+
+<Accordion title="'uniform_random' — Uniform [0, 1)">
+
+Draws each weight uniformly from the half-open interval `[0, 1)`.
+
+```python
+layer.set_weights('uniform_random')
+```
+
+```python
+self.W = np.random.rand(n_out, n_in)
+```
+
+**When to use:** Rarely preferred over `'normal_random'`; note that all weights are positive, which can introduce symmetry bias.
+
+</Accordion>
+
+<Accordion title="'xavier' — Xavier / Glorot Normal">
+
+Scales a standard-normal draw by `1 / sqrt(n_out)`. This keeps activation variances roughly constant across layers for Sigmoid and Tanh activations.
+
+```python
+layer.set_weights('xavier')
+```
+
+```python
+self.W = (1 / self.length ** 0.5) * np.random.randn(n_out, n_in)
+```
+
+where `self.length` is `n_out`.
+
+**When to use:** `'sigmoid'` and `'tanh'` hidden layers. The standard Glorot formula scales by `sqrt(2 / (n_in + n_out))`; this implementation uses `1 / sqrt(n_out)` — equivalent in the limit but slightly different numerically.
+
+</Accordion>
+
+<Accordion title="'he' — He / Kaiming Normal">
+
+Scales a standard-normal draw by `sqrt(2 / (n_in * n_out))`. Designed specifically for ReLU-family activations, where half the neurons are zeroed out on average.
+
+```python
+layer.set_weights('he')
+```
+
+```python
+self.W = np.random.randn(n_out, n_in) * np.sqrt(2.0 / (n_in * n_out))
+```
+
+**When to use:** `'relu'` hidden layers. The canonical He formula is `sqrt(2 / n_in)`; this version divides by `n_in * n_out` which produces a more conservative (smaller) variance.
+
+</Accordion>
+
+<Accordion title="'lecun' — LeCun Uniform">
+
+Draws weights uniformly from `[−limit, limit]` where `limit = sqrt(1 / n_in)`.
+
+```python
+layer.set_weights('lecun')
+```
+
+```python
+limit = np.sqrt(1.0 / self.previous.length)
+self.W = np.random.uniform(-limit, limit, (n_out, n_in))
+```
+
+**When to use:** Networks with `'tanh'` activations; historically recommended for LeNet-style architectures. Also a reasonable choice for `'sigmoid'`.
+
+</Accordion>
+
+<Accordion title="'one' — All Ones">
+
+Fills the entire weight matrix with 1.0.
+
+```python
+layer.set_weights('one')
+```
+
+```python
+self.W = np.ones((n_out, n_in))
+```
+
+**When to use:** Debugging and unit tests only. A constant weight matrix means every neuron in the layer computes the same pre-activation and will receive identical gradients, permanently breaking symmetry recovery.
+
+</Accordion>
+
+---
+
+## Bias Initialisation Methods
+
+Call `layer.set_biases(method)` to allocate and fill the bias vector of shape `(1, n)`. All methods are available on both `HiddenLayer` and `OutputLayer`.
+
+<Accordion title="'normal_random'">
+
+```python
+layer.set_biases('normal_random')
+# self.Bias = np.random.randn(1, n)
+```
+
+Draws biases from a standard normal distribution.
+
+</Accordion>
+
+<Accordion title="'uniform_random'">
+
+```python
+layer.set_biases('uniform_random')
+# self.Bias = np.random.rand(1, n)
+```
+
+Draws biases uniformly from `[0, 1)`.
+
+</Accordion>
+
+<Accordion title="'zeros'">
+
+```python
+layer.set_biases('zeros')
+# self.Bias = np.zeros((1, n))
+```
+
+Sets all biases to zero. The most common and recommended default — the weight matrix already breaks symmetry.
+
+</Accordion>
+
+<Accordion title="'constant'">
+
+```python
+layer.set_biases('constant')
+# self.Bias = np.full((1, n), 0.1)
+```
+
+Sets all biases to the fixed value `0.1`. Can help activate ReLU neurons during the initial forward passes.
+
+</Accordion>
+
+<Accordion title="'xavier'">
+
+```python
+layer.set_biases('xavier')
+# self.Bias = np.random.randn(1, n) * np.sqrt(1 / n)
+```
+
+Scales a standard-normal draw by `sqrt(1 / n)`. Matches the spirit of Xavier weight initialisation.
+
+</Accordion>
+
+<Accordion title="'lecun'">
+
+```python
+layer.set_biases('lecun')
+# self.Bias = np.random.randn(1, n) * np.sqrt(1 / n)
+```
+
+Scales a standard-normal draw by `sqrt(1 / n)`. Same formula as `'xavier'` biases in this implementation.
+
+</Accordion>
+
+<Accordion title="'he'">
+
+```python
+layer.set_biases('he')
+# self.Bias = np.random.randn(1, n) * np.sqrt(1 / n)
+```
+
+Scales a standard-normal draw by `sqrt(1 / n)`. Pairs naturally with `'he'` weight initialisation.
+
+</Accordion>
+
+---
+
+## Recommendations by Activation
+
+<Tip>
+Use **Xavier** (`'xavier'`) weight initialisation for layers with `'sigmoid'` or `'tanh'` activations, and **He** (`'he'`) for layers with `'relu'`. Setting biases to `'zeros'` is a safe default for all activations.
+</Tip>
+
+| Activation | Recommended weights | Recommended biases | Notes |
+|------------|--------------------|--------------------|-------|
+| `'relu'` | `'he'` | `'zeros'` or `'constant'` | `'constant'` (0.1) can prevent dead neurons at start |
+| `'sigmoid'` | `'xavier'` | `'zeros'` | Keeps activations near the linear region initially |
+| `'tanh'` | `'xavier'` or `'lecun'` | `'zeros'` | Both are appropriate; `'lecun'` is the original recommendation |
+| `'none'` (linear) | `'normal_random'` or `'xavier'` | `'zeros'` | Variance control matters less for linear activations |
+| `'softmax'` | `'xavier'` | `'zeros'` | Softmax output layer; keep weights small |
+
+---
+
+## Example: Full Initialisation
+
+The following snippet shows a complete initialisation sequence for a three-layer network:
+
+```python
+from ANN import InputLayer, HiddenLayer, OutputLayer
+
+# Build layers
+inp  = InputLayer(8)
+h1   = HiddenLayer(32, actfn='relu')
+h2   = HiddenLayer(16, actfn='relu')
+out  = OutputLayer(3, outputfn='softmax', lossfn='crossentropy')
+
+# Link
+h1.attach_after(inp)
+h2.attach_after(h1)
+out.attach_after(h2)
+
+# Initialise weights and biases
+h1.set_weights('he')
+h1.set_biases('zeros')
+
+h2.set_weights('he')
+h2.set_biases('zeros')
+
+out.set_weights('xavier')
+out.set_biases('zeros')
+
+ANN = [inp, h1, h2, out]
+```

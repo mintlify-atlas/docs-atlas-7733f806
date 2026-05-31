@@ -1,0 +1,219 @@
+---
+title: "Loss Functions: MSE, Cross-Entropy, Binary Cross-Entropy"
+sidebarTitle: "Loss Functions"
+description: "The three loss functions in Neural Network Framework — MSE, Binary Cross-Entropy, and Categorical Cross-Entropy. Covers formulas, output activation pairings, and derivatives."
+---
+
+A loss function measures how far the network's predictions are from the ground-truth labels during training. Neural Network Framework provides three built-in loss functions, selected via the `lossfn` argument of `OutputLayer`. The chosen loss determines both the scalar value returned by `OutputLayer.loss()` and the derivative used as the starting signal for backpropagation. Picking the right loss — and pairing it with the correct output activation — is essential for stable, meaningful training.
+
+<Note>
+Always pair your loss function with the appropriate output activation:
+
+| Loss key | Output activation | Task |
+|----------|------------------|------|
+| `'MSE'` | `'none'` or `'sigmoid'` | Regression |
+| `'bincrossentropy'` | `'sigmoid'` | Binary classification |
+| `'crossentropy'` | `'softmax'` | Multi-class classification |
+
+Mismatched pairings will produce incorrect gradients without raising an error.
+</Note>
+
+---
+
+## Mean Squared Error (MSE)
+
+MSE is the classic regression loss. It penalises large deviations quadratically, making it sensitive to outliers.
+
+**Key:** `'MSE'`
+
+**Constructor usage**
+
+```python
+output = OutputLayer(1, outputfn='none', lossfn='MSE')
+```
+
+**Formula**
+
+```
+MSE = (1 / n) · Σ_i (ŷ_i − y_i)²
+```
+
+where `n` is the number of output neurons, `ŷ_i` is the predicted value, and `y_i` is the ground truth.
+
+```python
+def MSE_Loss(activations, actual):
+    loss = 0
+    activations = activations[0]
+    for i in range(len(activations)):
+        loss += (activations[i] - actual[i]) ** 2
+    return (1 / len(activations)) * loss
+```
+
+**`OutputLayer.loss()` return value:** A single Python float — the average squared error across all output neurons for the current sample.
+
+**Derivative used in backprop**
+
+The scalar gradient accumulated over all outputs:
+
+```
+dL/dŷ = Σ_i (2 / n) · (ŷ_i − y_i)
+```
+
+```python
+def MSE_Derivative(activations, actual):
+    y = actual
+    activations = activations[0]
+    dLdy = 0
+    for i in range(len(y)):
+        dLdy += (2 / len(activations)) * (activations[i] - y[i])
+    return dLdy
+```
+
+<Note>
+The MSE derivative returns a **scalar** (summed over outputs), unlike the vector derivatives of the cross-entropy losses. This is intentional for the current implementation and works correctly when combined with the chain-rule computation in `OutputLayer.backward()`.
+</Note>
+
+---
+
+## Binary Cross-Entropy
+
+Binary Cross-Entropy (BCE) is the standard loss for binary classification problems, where the output layer has a single neuron with a sigmoid activation representing the probability of the positive class.
+
+**Key:** `'bincrossentropy'`
+
+**Constructor usage**
+
+```python
+output = OutputLayer(1, outputfn='sigmoid', lossfn='bincrossentropy')
+```
+
+**Formula**
+
+```
+BCE = −(1 / n) · Σ_i [ y_i · log(ŷ_i) + (1 − y_i) · log(1 − ŷ_i) ]
+```
+
+An `epsilon = 1e-10` clamp is applied to `ŷ_i` before taking logarithms to prevent `log(0)`:
+
+```python
+def Binary_CrossEntropy_Loss(activations, actual):
+    epsilon = 1e-10
+    activations = activations[0]
+    activations = np.clip(activations, epsilon, 1 - epsilon)
+    loss = -np.sum(actual * np.log(activations) + (1 - actual) * np.log(1 - activations))
+    return loss / len(activations)
+```
+
+**`OutputLayer.loss()` return value:** A single float — the average BCE over all output neurons.
+
+**Derivative used in backprop**
+
+```
+dL/dŷ_i = (ŷ_i − y_i) / (ŷ_i · (1 − ŷ_i) + ε)
+```
+
+The result is returned as a column vector of shape `(n, 1)`:
+
+```python
+def Binary_CrossEntropy_Derivative(activations, actual):
+    activations = activations[0]
+    epsilon = 1e-10
+    activations = np.clip(activations, epsilon, 1 - epsilon)
+    return np.array(
+        (activations - actual) / (activations * (1 - activations) + epsilon)
+    ).reshape(-1, 1)
+```
+
+<Note>
+The `epsilon = 1e-10` floor in both the loss and derivative guards against division by zero when a neuron's output saturates to exactly 0 or 1. This can occur with Sigmoid when pre-activations are very large in magnitude.
+</Note>
+
+---
+
+## Categorical Cross-Entropy
+
+Categorical Cross-Entropy is designed for multi-class classification problems where labels are one-hot encoded (exactly one element of the `actual` array equals 1, all others are 0).
+
+**Key:** `'crossentropy'`
+
+**Constructor usage**
+
+```python
+output = OutputLayer(10, outputfn='softmax', lossfn='crossentropy')
+```
+
+**Formula**
+
+```
+CE = −log(ŷ_c)
+```
+
+where `c` is the index of the true class (the index where `actual[c] == 1`).
+
+```python
+def CrossEntropy_Loss(activations, actual):
+    activations = activations[0]
+    tc = -1
+    for i in range(len(actual)):
+        if actual[i] == 1:
+            tc = i
+            break
+    epsilon = 1e-10
+    activations = np.clip(activations, epsilon, 1 - epsilon)
+    ce_loss = -(actual[tc] * np.log(activations[tc]))
+    return ce_loss
+```
+
+**`OutputLayer.loss()` return value:** A single float — the negative log-probability assigned to the true class.
+
+**Derivative used in backprop**
+
+For all classes other than the true class the gradient is zero; for the true class:
+
+```
+dL/dŷ_c = −actual_c / ŷ_c
+```
+
+```python
+def CrossEntropy_Derivative(activations, actual):
+    epsilon = 1e-10
+    activations = activations[0]
+    activations = np.clip(activations, epsilon, 1 - epsilon)
+    derivative = np.zeros_like(activations)
+    tc = -1
+    for i in range(len(actual)):
+        if actual[i] == 1:
+            tc = i
+            break
+    derivative[tc] = -actual[tc] / activations[tc]
+    return derivative.reshape(-1, 1)
+```
+
+<Warning>
+When `outputfn='softmax'` is active, `OutputLayer.backward()` bypasses the `CrossEntropy_Derivative` entirely and instead uses the analytically simplified combined gradient `activations − actual`. This is numerically superior and avoids instabilities in the softmax Jacobian. The `CrossEntropy_Derivative` function is still called when softmax is **not** the output activation, but that pairing is not recommended.
+</Warning>
+
+---
+
+## Comparison Summary
+
+<CardGroup cols={3}>
+  <Card title="MSE" icon="chart-line">
+    **Task:** Regression  
+    **Output activation:** `'none'`  
+    **Gradient shape:** scalar  
+    **Sensitive to outliers:** yes (quadratic penalty)
+  </Card>
+  <Card title="Binary Cross-Entropy" icon="toggle-on">
+    **Task:** Binary classification  
+    **Output activation:** `'sigmoid'`  
+    **Gradient shape:** `(n, 1)` vector  
+    **Epsilon clipping:** yes (`1e-10`)
+  </Card>
+  <Card title="Categorical Cross-Entropy" icon="list-check">
+    **Task:** Multi-class classification  
+    **Output activation:** `'softmax'`  
+    **Gradient shape:** `(n, 1)` vector  
+    **Requires one-hot labels:** yes
+  </Card>
+</CardGroup>

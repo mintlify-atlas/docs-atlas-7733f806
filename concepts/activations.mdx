@@ -1,0 +1,237 @@
+---
+title: "Activation Functions Reference"
+sidebarTitle: "Activations"
+description: "All activation functions available in Neural Network Framework: Sigmoid, ReLU, Tanh, Softmax, and linear. Includes formulas, derivatives, and recommended use cases."
+---
+
+Activation functions introduce the nonlinearity that lets a neural network learn complex mappings. Neural Network Framework ships five built-in activation functions, each identified by a short string key that you pass to a layer constructor. Every hidden layer and the output layer accept an activation string; `InputLayer` also accepts one if you want to transform raw features before they enter the network. This page documents each function, its derivative as used during backpropagation, and guidance on where to use it.
+
+## Quick-Reference Table
+
+| Activation | Key | Typical use |
+|------------|-----|-------------|
+| Sigmoid | `'sigmoid'` | Binary output neuron; shallow hidden layers |
+| ReLU | `'relu'` | General-purpose hidden layers |
+| Tanh | `'tanh'` | Hidden layers; zero-centred alternative to Sigmoid |
+| Softmax | `'softmax'` | Multi-class output layer **only** |
+| Linear (identity) | `'none'` | Regression output; pass-through input layer |
+
+---
+
+## Sigmoid
+
+Sigmoid squashes any real number into the range `(0, 1)`, making it a natural choice for output neurons that represent probabilities.
+
+**Constructor usage**
+
+```python
+hidden = HiddenLayer(16, actfn='sigmoid')
+output = OutputLayer(1, outputfn='sigmoid', lossfn='bincrossentropy')
+```
+
+**Formula**
+
+```
+σ(x) = 1 / (1 + exp(−x))
+```
+
+The implementation clips the input to `[−500, 500]` before exponentiation to prevent overflow:
+
+```python
+def SigmoidActivation(x):
+    return 1 / (1 + np.exp(-np.clip(x, -500, 500)))
+```
+
+**Derivative (used in backprop)**
+
+```
+σ'(x) = σ(x) · (1 − σ(x))
+```
+
+```python
+def sigmoid_derivative(x):
+    sigmoid_x = SigmoidActivation(x)
+    return sigmoid_x * (1 - sigmoid_x)
+```
+
+<Note>
+Sigmoid suffers from the **vanishing gradient** problem in deep networks — the derivative is at most 0.25 and shrinks toward zero in the tails. Prefer ReLU for hidden layers in deep architectures.
+</Note>
+
+---
+
+## ReLU
+
+Rectified Linear Unit passes positive values unchanged and zeros out negatives. It is the most widely used hidden-layer activation because it rarely saturates and produces sparse activations.
+
+**Constructor usage**
+
+```python
+hidden = HiddenLayer(64, actfn='relu')
+```
+
+**Formula**
+
+```
+ReLU(x) = max(0, x)
+```
+
+```python
+def ReLUActivation(x):
+    return np.maximum(0, x)
+```
+
+**Derivative (used in backprop)**
+
+```
+ReLU'(x) = 0  if x ≤ 0
+            1  if x > 0
+```
+
+```python
+def ReLUDerivative(x):
+    return np.where(x <= 0, 0, 1)
+```
+
+<Note>
+The **dying ReLU** problem occurs when neurons receive only negative inputs and permanently output zero. Using He initialisation (`set_weights('he')`) and a moderate learning rate helps avoid this.
+</Note>
+
+---
+
+## Tanh
+
+Hyperbolic tangent maps inputs to `(−1, 1)` and is zero-centred, which can make gradient updates more symmetric than Sigmoid.
+
+**Constructor usage**
+
+```python
+hidden = HiddenLayer(32, actfn='tanh')
+```
+
+**Formula**
+
+```
+tanh(x) = (exp(x) − exp(−x)) / (exp(x) + exp(−x))
+```
+
+```python
+def TanhActivation(x):
+    return np.tanh(x)
+```
+
+**Derivative (used in backprop)**
+
+```
+tanh'(x) = 1 − tanh²(x)
+```
+
+```python
+def TanhDerivative(x):
+    return 1 - np.tanh(x) ** 2
+```
+
+<Note>
+Like Sigmoid, Tanh can produce vanishing gradients in very deep networks. Its zero-centred output can improve convergence speed compared to Sigmoid in practice.
+</Note>
+
+---
+
+## Softmax
+
+Softmax converts a vector of raw scores into a valid probability distribution — all outputs sum to 1.0. It is designed **exclusively** for the output layer of multi-class classification problems.
+
+**Constructor usage**
+
+```python
+output = OutputLayer(10, outputfn='softmax', lossfn='crossentropy')
+```
+
+**Formula**
+
+```
+Softmax(x)_i = exp(x_i − max(x)) / Σ_j exp(x_j − max(x))
+```
+
+Subtracting `max(x)` before exponentiation is a standard numerical stability trick:
+
+```python
+def SoftmaxActivation(x):
+    exp_values = np.exp(x - np.max(x))
+    return exp_values / np.sum(exp_values)
+```
+
+**Derivative (used in backprop)**
+
+The full Jacobian is an `n × n` matrix:
+
+```
+∂Softmax_i / ∂x_j = Softmax_i · (δ_ij − Softmax_j)
+```
+
+```python
+def softmax_derivative(x):
+    n = np.size(x)
+    exp_values = np.exp(x - np.max(x))
+    softmax_output = exp_values / np.sum(exp_values)
+    derivative = softmax_output * (np.identity(n) - softmax_output.T)
+    return derivative
+```
+
+<Warning>
+When `lossfn='crossentropy'` is combined with `outputfn='softmax'`, the framework uses the analytically simplified gradient `activations − actual` instead of the full Jacobian product. This is the standard trick for numerical stability and matches the theoretical result for the softmax + cross-entropy combination. Do **not** pair `'softmax'` with `'MSE'` or `'bincrossentropy'` — the gradient computation will be incorrect.
+</Warning>
+
+---
+
+## Linear (Identity)
+
+The `'none'` key selects the identity function, which passes the pre-activation value through unchanged. It is the default for all layer types.
+
+**Constructor usage**
+
+```python
+input_layer  = InputLayer(4)                         # default 'none'
+output_layer = OutputLayer(1, outputfn='none', lossfn='MSE')  # regression
+```
+
+**Formula**
+
+```
+f(x) = x
+```
+
+```python
+def noActivation(x):
+    return x
+```
+
+**Derivative (used in backprop)**
+
+```
+f'(x) = 1  (for all x)
+```
+
+The derivative is implemented as a ones-vector matching the length of the input:
+
+```python
+def noActDerivative(x):
+    return np.ones((1, len(x)))
+```
+
+---
+
+## Choosing the Right Activation
+
+<CardGroup cols={2}>
+  <Card title="Hidden Layers" icon="layer-group">
+    **ReLU** is the default choice for most architectures — fast to compute and avoids saturation.  
+    Use **Tanh** when you need zero-centred activations (e.g., RNNs or shallow networks).  
+    Use **Sigmoid** rarely in hidden layers; mainly useful for historical compatibility.
+  </Card>
+  <Card title="Output Layer" icon="circle-dot">
+    **Softmax** for multi-class classification (pair with `'crossentropy'`).  
+    **Sigmoid** for binary classification (pair with `'bincrossentropy'`).  
+    **Linear (`'none'`)** for regression tasks (pair with `'MSE'`).
+  </Card>
+</CardGroup>

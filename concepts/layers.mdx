@@ -1,0 +1,267 @@
+---
+title: "Layer Types: InputLayer, HiddenLayer, OutputLayer"
+sidebarTitle: "Layers"
+description: "Reference for the three layer classes in Neural Network Framework. Covers constructor parameters, key attributes, and the methods each layer exposes."
+---
+
+Neural Network Framework exposes exactly three layer classes: `InputLayer`, `HiddenLayer`, and `OutputLayer`. Every network is composed exclusively from these three building blocks, placed in a Python list in data-flow order. This page documents each class's constructor signature, the attributes it exposes after construction and after a forward/backward pass, and the methods available on each instance.
+
+---
+
+## InputLayer
+
+`InputLayer` is always the first element in the network list. Its sole responsibility is to accept raw feature vectors and, optionally, apply an activation before passing values downstream.
+
+```python
+from ANN import InputLayer
+
+layer = InputLayer(n=4, actfn='none')
+```
+
+<ParamField path="n" type="int" required>
+  Number of input neurons — must equal the number of features in each input sample.
+</ParamField>
+
+<ParamField path="actfn" type="str" default="none">
+  Activation function applied to the raw inputs before they are read by the next layer.
+  Accepted values: `'sigmoid'`, `'relu'`, `'tanh'`, `'none'`.
+</ParamField>
+
+<Accordion title="Attributes">
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `length` | `int` | Number of neurons; equals the `n` argument passed to the constructor. |
+| `inputs` | `np.ndarray` | Raw feature vector set by `put_values`. Shape `(1, n)` before forward, empty array at construction. |
+| `pre_activations` | `np.ndarray` | Equals `inputs` (squeezed to 1-D). Set during `forward()`. |
+| `activations` | `np.ndarray` | Result of applying `actfn` to `pre_activations`. Read by the next layer during its own `forward()`. |
+
+</Accordion>
+
+<Accordion title="Methods">
+
+**`put_values(values)`**
+
+Stores a feature vector inside the layer. `values` must be a list or array whose length equals `n`; if the length does not match, the method prints an error message and leaves `inputs` unchanged.
+
+```python
+layer.put_values([0.5, 1.2, -0.3, 0.8])
+```
+
+---
+
+**`forward()`**
+
+Copies `inputs` into `pre_activations` (squeezing any leading dimension) and applies the chosen activation function, writing the result to `activations`. Call this as part of the left-to-right sweep over `ANN`.
+
+```python
+for layer in ANN:
+    layer.forward()
+```
+
+</Accordion>
+
+<Warning>
+`InputLayer` has no `set_weights`, `set_biases`, or `backward` method. Attempting to call them will raise an `AttributeError`.
+</Warning>
+
+---
+
+## HiddenLayer
+
+`HiddenLayer` sits between the input and output. It owns a weight matrix and a bias vector, applies an activation function, and can participate in both forward and backward passes. A network may contain any number of hidden layers.
+
+```python
+from ANN import HiddenLayer
+
+layer = HiddenLayer(n=8, actfn='relu')
+```
+
+<ParamField path="n" type="int" required>
+  Number of neurons in this hidden layer.
+</ParamField>
+
+<ParamField path="actfn" type="str" default="none">
+  Activation function. Accepted values: `'sigmoid'`, `'relu'`, `'tanh'`, `'none'`.
+</ParamField>
+
+<Accordion title="Attributes">
+
+| Attribute | Type | Available after | Description |
+|-----------|------|-----------------|-------------|
+| `length` | `int` | construction | Number of neurons (`n`). |
+| `W` | `np.ndarray` | `set_weights()` | Weight matrix of shape `(n, prev.length)`. |
+| `Bias` | `np.ndarray` | `set_biases()` | Bias vector of shape `(1, n)`. |
+| `pre_activations` | `np.ndarray` | `forward()` | Linear combination `W @ prev.activations + Bias`, squeezed to 1-D. |
+| `activations` | `np.ndarray` | `forward()` | `actfn(pre_activations)`. Read by the next layer. |
+| `dLda` | `np.ndarray` | `backward()` | Gradient of loss w.r.t. this layer's pre-activation. Shape `(n, 1)`. |
+| `dLdW` | `np.ndarray` | `backward()` | Gradient of loss w.r.t. `W`. Shape `(n, prev.length)`. Used for the weight update step. |
+
+</Accordion>
+
+<Accordion title="Methods">
+
+**`attach_after(layer)`**
+
+Links this layer to its predecessor. Sets `self.previous = layer` and `layer.next = self`. Must be called before `set_weights`, `set_biases`, or `forward`.
+
+```python
+hidden1.attach_after(input_layer)
+```
+
+---
+
+**`set_weights(method)`**
+
+Allocates and initialises the weight matrix `W` of shape `(self.length, self.previous.length)`. See [Weight Initialization](/concepts/weight-initialization) for the full list of `method` strings and their formulas.
+
+```python
+hidden1.set_weights('he')        # recommended for ReLU
+hidden1.set_weights('xavier')    # recommended for Tanh / Sigmoid
+```
+
+---
+
+**`set_biases(method)`**
+
+Allocates and initialises the bias vector `Bias` of shape `(1, self.length)`.
+
+```python
+hidden1.set_biases('zeros')
+hidden1.set_biases('constant')   # fills with 0.1
+```
+
+---
+
+**`forward()`**
+
+Computes `pre_activations = W @ previous.activations + Bias` (squeezed to 1-D) and then `activations = actfn(pre_activations)`. Called during the left-to-right sweep.
+
+---
+
+**`backward()`**
+
+Reads `self.next.dLda` and `self.next.W`, computes the chain-rule gradient through the activation function, and stores the result in `self.dLda` and `self.dLdW`. Called during the right-to-left sweep — **after** the next layer's `backward()` has already run.
+
+</Accordion>
+
+---
+
+## OutputLayer
+
+`OutputLayer` is always the last element in the network list. It owns its own weight matrix and bias, applies an output activation, computes the scalar loss, and provides the starting point for backpropagation.
+
+```python
+from ANN import OutputLayer
+
+layer = OutputLayer(n=3, outputfn='softmax', lossfn='crossentropy')
+```
+
+<ParamField path="n" type="int" required>
+  Number of output neurons — one per class for classification, one for scalar regression.
+</ParamField>
+
+<ParamField path="outputfn" type="str" default="none">
+  Output activation. Accepted values: `'sigmoid'`, `'relu'`, `'tanh'`, `'softmax'`, `'none'`.
+</ParamField>
+
+<ParamField path="lossfn" type="str" default="MSE">
+  Loss function used to train the network. Accepted values: `'MSE'`, `'bincrossentropy'`, `'crossentropy'`.
+</ParamField>
+
+<Accordion title="Attributes">
+
+| Attribute | Type | Available after | Description |
+|-----------|------|-----------------|-------------|
+| `length` | `int` | construction | Number of output neurons. |
+| `W` | `np.ndarray` | `set_weights()` | Weight matrix of shape `(n, prev.length)`. |
+| `Bias` | `np.ndarray` | `set_biases()` | Bias vector of shape `(1, n)`. |
+| `actual` | `np.ndarray` | `set_actual()` | Ground-truth label stored for loss and gradient computation. |
+| `pre_activations` | `np.ndarray` | `forward()` | Linear combination before the output activation. |
+| `activations` | `np.ndarray` | `forward()` | Output activation applied to `pre_activations`. |
+| `dLda` | `np.ndarray` | `backward()` | Gradient of loss w.r.t. this layer's pre-activation. Shape `(n, 1)`. Used by `HiddenLayer.backward()` of the previous layer. |
+| `dLdW` | `np.ndarray` | `backward()` | Gradient of loss w.r.t. `W`. Used in the weight update step. |
+
+</Accordion>
+
+<Accordion title="Methods">
+
+**`attach_after(layer)`**
+
+Same contract as `HiddenLayer.attach_after`. Must be called before weight initialisation or any forward pass.
+
+```python
+output_layer.attach_after(hidden1)
+```
+
+---
+
+**`set_weights(method)`**
+
+Allocates `W` of shape `(self.length, self.previous.length)`. Accepts the same `method` strings as `HiddenLayer.set_weights`.
+
+---
+
+**`set_biases(method)`**
+
+Allocates `Bias` of shape `(1, self.length)`. Accepts the same `method` strings as `HiddenLayer.set_biases`.
+
+---
+
+**`set_actual(actual)`**
+
+Stores the ground-truth label for the current sample. Must be called before `loss()` or `backward()`.
+
+```python
+output_layer.set_actual(y_train[k])
+```
+
+---
+
+**`forward()`**
+
+Computes `pre_activations = W @ previous.activations + Bias` and then `activations = outputfn(pre_activations)`.
+
+---
+
+**`backward()`**
+
+Computes the gradient of the chosen loss function w.r.t. `activations`, then chains through the output activation's derivative, and finally calculates `dLdW` using the previous layer's activations. This is the first call in the right-to-left sweep.
+
+---
+
+**`output()`**
+
+Returns `self.activations` — the network's raw prediction for the current sample.
+
+```python
+prediction = output_layer.output()
+```
+
+---
+
+**`loss()`**
+
+Calls the stored loss function with `(self.activations, self.actual)` and returns a scalar. Useful for monitoring training progress.
+
+```python
+current_loss = output_layer.loss()
+```
+
+</Accordion>
+
+---
+
+## Quick-Reference Summary
+
+<CardGroup cols={3}>
+  <Card title="InputLayer" icon="arrow-right-to-bracket">
+    Accepts raw features via `put_values`. No weights or biases. Optional activation on inputs. Always index `0` in the `ANN` list.
+  </Card>
+  <Card title="HiddenLayer" icon="layer-group">
+    Owns `W` and `Bias`. Supports `forward()` and `backward()`. Stack as many as needed between input and output.
+  </Card>
+  <Card title="OutputLayer" icon="circle-dot">
+    Owns `W` and `Bias`. Computes loss via `loss()`, exposes predictions via `output()`, and seeds backprop via `backward()`. Always the last element in the `ANN` list.
+  </Card>
+</CardGroup>

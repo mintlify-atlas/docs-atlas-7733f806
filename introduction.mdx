@@ -1,0 +1,164 @@
+---
+title: "Neural Network Framework: Pure NumPy Deep Learning"
+sidebarTitle: "Introduction"
+description: "Neural Network Framework is a from-scratch NumPy neural network library. Learn what it provides, its architecture, and when to use it over heavier frameworks."
+---
+
+Neural Network Framework is a feedforward neural network library built entirely from scratch using NumPy. It gives you direct, transparent access to every building block of a deep learning pipeline — layer construction, weight initialization, forward propagation, backpropagation, and gradient-descent training — all without hiding the math behind a high-level abstraction. This page introduces the framework's architecture, covers the activation and loss functions available, explains the supported weight initialization strategies, and describes the two built-in training utilities so you can decide whether this library is the right fit for your project.
+
+<Note>
+  Neural Network Framework depends only on **NumPy** and **Matplotlib**. TensorFlow is an optional dependency used solely for convenient MNIST dataset loading in the provided example scripts — it is not required for any core functionality.
+</Note>
+
+## Architecture overview
+
+The framework models a neural network as a plain Python list of layer objects. Each layer stores its own weights, biases, pre-activations, and activations. Layers are linked in a chain through `attach_after()` calls, and a forward pass is triggered by iterating over the list and calling `layer.forward()` on each element. Backpropagation works in reverse: each layer computes its own gradients through a `layer.backward()` call, and the training loop applies gradient-descent weight updates.
+
+<CardGroup cols={2}>
+  <Card title="InputLayer" icon="arrow-right-to-bracket">
+    Accepts raw input vectors via `put_values(values)` and applies an optional activation function before passing activations downstream. Supports `sigmoid`, `relu`, `tanh`, and `none` (linear pass-through).
+  </Card>
+  <Card title="HiddenLayer" icon="layer-group">
+    Performs a learned affine transformation (`W · x + b`) followed by a non-linear activation. Linked to its predecessor with `attach_after(layer)`. Supports `sigmoid`, `relu`, `tanh`, and `none`.
+  </Card>
+  <Card title="OutputLayer" icon="flag-checkered">
+    Extends the hidden layer with a dedicated loss function. Supports `sigmoid`, `relu`, `tanh`, `softmax`, and `none` as output activations, paired with `MSE`, `bincrossentropy`, or `crossentropy` loss.
+  </Card>
+  <Card title="Training utilities" icon="rotate">
+    Two ready-made gradient-descent loops handle the full train/backprop/update cycle: `gradient_descent_epoch` runs for a fixed number of epochs, while `gradient_descent_threshold` runs until a target loss value is reached.
+  </Card>
+</CardGroup>
+
+## Layer types
+
+### InputLayer
+
+```python
+InputLayer(n, actfn="none")
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `n` | `int` | Number of input neurons. |
+| `actfn` | `str` | Activation to apply: `"sigmoid"`, `"relu"`, `"tanh"`, or `"none"`. |
+
+Call `put_values(values)` before each forward pass to load a single sample into the layer. The method validates that `len(values) == n`.
+
+### HiddenLayer
+
+```python
+HiddenLayer(n, actfn="none")
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `n` | `int` | Number of neurons in this layer. |
+| `actfn` | `str` | Activation to apply: `"sigmoid"`, `"relu"`, `"tanh"`, or `"none"`. |
+
+After construction, call `attach_after(layer)` to connect the layer to its predecessor. Then call `set_weights(method)` and, optionally, `set_biases(method)`.
+
+### OutputLayer
+
+```python
+OutputLayer(n, outputfn="none", lossfn="MSE")
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `n` | `int` | Number of output neurons. |
+| `outputfn` | `str` | Output activation: `"sigmoid"`, `"relu"`, `"tanh"`, `"softmax"`, or `"none"`. |
+| `lossfn` | `str` | Loss function: `"MSE"`, `"bincrossentropy"`, or `"crossentropy"`. |
+
+Use `set_actual(actual)` before each backward pass to register the ground-truth label. Call `output()` after a forward pass to retrieve the layer's activations, and `loss()` to compute the scalar loss value.
+
+## Activation functions
+
+Every layer accepts an activation function string at construction time. The following functions are available across `InputLayer`, `HiddenLayer`, and `OutputLayer`:
+
+| Key | Function | Notes |
+|-----|----------|-------|
+| `"sigmoid"` | σ(x) = 1 / (1 + e^−x) | Input is clipped to [−500, 500] to prevent overflow. |
+| `"relu"` | max(0, x) | Recommended for deep hidden layers. |
+| `"tanh"` | tanh(x) | Zero-centered; useful in hidden layers. |
+| `"softmax"` | exp(xᵢ) / Σ exp(x) | Available in `OutputLayer` only; use with `"crossentropy"`. |
+| `"none"` | f(x) = x | Linear pass-through; useful for regression output layers. |
+
+## Loss functions
+
+Loss functions are set on the `OutputLayer` at construction time. Each loss function has a matching analytic derivative used during backpropagation.
+
+| Key | Formula | Typical use case |
+|-----|---------|-----------------|
+| `"MSE"` | (1/n) Σ (ŷᵢ − yᵢ)² | Regression; single continuous output. |
+| `"bincrossentropy"` | −(y log ŷ + (1−y) log(1−ŷ)) / n | Binary classification with sigmoid output. |
+| `"crossentropy"` | −Σ yᵢ log ŷᵢ | Multi-class classification with softmax output. |
+
+## Weight initialization strategies
+
+Both `HiddenLayer` and `OutputLayer` expose `set_weights(method)` and `set_biases(method)`. Choosing the right initialization strategy can dramatically affect convergence speed.
+
+### `set_weights(method)`
+
+| Method | Distribution | Best paired with |
+|--------|-------------|-----------------|
+| `"normal_random"` | Standard normal N(0, 1) | General-purpose starting point. |
+| `"uniform_random"` | Uniform U(0, 1) | Shallow networks. |
+| `"xavier"` | N(0, 1) · 1/√n | Sigmoid and Tanh activations. |
+| `"he"` | N(0, 1) · √(2 / (n_in · n_out)) | ReLU activations. |
+| `"lecun"` | U(−√(1/n_in), √(1/n_in)) | Selu/LeCun-style networks. |
+| `"one"` | Constant 1.0 | Debugging and symmetry checks. |
+
+### `set_biases(method)`
+
+| Method | Value |
+|--------|-------|
+| `"normal_random"` | N(0, 1) |
+| `"uniform_random"` | U(0, 1) |
+| `"zeros"` | 0.0 |
+| `"constant"` | 0.1 |
+| `"xavier"` | N(0, 1) · √(1/n) |
+| `"he"` | N(0, 1) · √(1/n) |
+| `"lecun"` | N(0, 1) · √(1/n) |
+
+## Training loops
+
+### gradient_descent_epoch
+
+```python
+gradient_descent_epoch(ANN, x, y, eta, epochs)
+```
+
+Runs the full train/backprop/update cycle for exactly `epochs` iterations over the entire dataset. After each epoch, the function prints the current loss and classification accuracy, and appends the loss to a running list. Returns the updated `(ANN, loss)` tuple.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `ANN` | `list` | Ordered list of layer objects `[InputLayer, ..., OutputLayer]`. |
+| `x` | `ndarray` | Input samples, shape `(n_samples, n_features)`. |
+| `y` | `ndarray` | Target labels, shape `(n_samples, n_outputs)`. |
+| `eta` | `float` | Learning rate. |
+| `epochs` | `int` | Number of full passes over the dataset. |
+
+### gradient_descent_threshold
+
+```python
+gradient_descent_threshold(ANN, x, y, eta, thresh)
+```
+
+Identical to `gradient_descent_epoch` except training stops early when `loss ≤ thresh` **or** when the loss increases between consecutive epochs (early divergence detection). Useful when you want to train until a quality criterion is met rather than for a fixed number of steps.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `thresh` | `float` | Target loss value; training halts once this threshold is reached. |
+
+## When to use this framework
+
+Neural Network Framework is the right tool when you want to **understand what is actually happening** inside a feedforward network. Because every operation — matrix multiplication, activation derivative, gradient accumulation, weight update — is written explicitly in NumPy, you can set breakpoints, print intermediate tensors, and trace the math step by step.
+
+Choose Neural Network Framework when you are:
+
+- **Learning** backpropagation and gradient descent from first principles.
+- **Experimenting** with custom activation functions, weight initializations, or loss combinations without recompiling a computation graph.
+- **Researching** small-scale feedforward architectures where framework overhead is irrelevant.
+- **Teaching** a course or workshop that requires students to see every matrix operation.
+
+Reach for PyTorch, TensorFlow, or JAX instead when you need GPU acceleration, automatic differentiation over arbitrary computation graphs, production-grade deployment, convolutional or recurrent architectures, or distributed training at scale.

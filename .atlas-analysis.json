@@ -1,0 +1,75 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "Neural Network Framework",
+  "projectDescription": "A from-scratch NumPy-based neural network framework implementing feedforward networks with configurable layers, activation functions, weight initializers, and loss functions.",
+  "theme": "luma",
+  "primaryColor": "#4F46E5",
+  "lightColor": "#818CF8",
+  "darkColor": "#312E81",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/layers",
+              "concepts/activations",
+              "concepts/loss-functions",
+              "concepts/weight-initialization"
+            ]
+          },
+          {
+            "group": "Training",
+            "pages": [
+              "training/gradient-descent",
+              "training/backpropagation"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/xor",
+              "examples/autoencoder",
+              "examples/mnist"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Pure NumPy implementation — no deep learning frameworks required",
+    "Modular layer system: InputLayer, HiddenLayer, OutputLayer",
+    "Multiple activation functions: Sigmoid, ReLU, Tanh, Softmax",
+    "Multiple loss functions: MSE, Binary Cross-Entropy, Categorical Cross-Entropy",
+    "Flexible weight initialization: normal random, uniform random, Xavier, He, LeCun",
+    "Gradient-descent training with epoch-based and threshold-based stopping",
+    "Built-in examples: XOR, binary autoencoder, image autoencoder, MNIST classification"
+  ],
+  "publicApiSurface": [
+    "InputLayer(n, actfn)",
+    "HiddenLayer(n, actfn)",
+    "OutputLayer(n, outputfn, lossfn)",
+    "HiddenLayer.attach_after(layer)",
+    "OutputLayer.attach_after(layer)",
+    "HiddenLayer.set_weights(method)",
+    "HiddenLayer.set_biases(method)",
+    "OutputLayer.set_weights(method)",
+    "OutputLayer.set_biases(method)",
+    "InputLayer.put_values(values)",
+    "layer.forward()",
+    "layer.backward()",
+    "OutputLayer.output()",
+    "OutputLayer.loss()",
+    "OutputLayer.set_actual(actual)",
+    "gradient_descent_epoch(ANN, x, y, eta, epochs)",
+    "gradient_descent_threshold(ANN, x, y, eta, thresh)"
+  ]
+}

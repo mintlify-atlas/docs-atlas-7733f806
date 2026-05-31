@@ -1,47 +1,219 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Neural Network Framework"
+sidebarTitle: "Quickstart"
+description: "Learn how to install Neural Network Framework and train your first neural network — a binary XOR classifier — in under 30 lines of Python."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+Neural Network Framework needs nothing beyond NumPy and Matplotlib to run. In this guide you will install those two dependencies, import the library, wire together a small three-layer network, and train it to solve the classic XOR problem — a non-linearly-separable binary classification task that requires at least one hidden layer to learn correctly. By the end of the page you will have a working training loop and know how to run inference on new inputs.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+<Step title="Install dependencies">
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+Neural Network Framework's only runtime requirements are NumPy (for all tensor operations) and Matplotlib (for plotting the loss curve). Install them with pip:
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
-</Steps>
+```python
+pip install numpy matplotlib
+```
+
+No other packages are required. If you later want to load the MNIST dataset using the provided example scripts, you can optionally install TensorFlow — but it is never needed for the core library.
+
+</Step>
+
+<Step title="Import the library">
+
+Place `ANN.py` in the same directory as your script, then import everything from it with a wildcard import. This makes all layer classes, weight initialization helpers, and training loop functions available in your namespace:
+
+```python
+from ANN import *
+```
+
+`from ANN import *` exposes `InputLayer`, `HiddenLayer`, `OutputLayer`, `gradient_descent_epoch`, `gradient_descent_threshold`, and the underlying NumPy namespace (`np`) — everything you need to build and train a network.
+
+</Step>
+
+<Step title="Define your layers">
+
+Create each layer with its neuron count and activation function, then link hidden and output layers to their predecessors using `attach_after()`.
+
+For XOR, the input has 2 features, a single hidden layer has 2 neurons with sigmoid activation, and the output has 1 neuron with a linear (`"none"`) activation and MSE loss:
+
+```python
+# Input layer: 2 neurons, sigmoid activation
+i = InputLayer(2, "sigmoid")
+
+# Hidden layer: 2 neurons, sigmoid activation, connected to input
+h1 = HiddenLayer(2, "sigmoid")
+h1.attach_after(i)
+
+# Output layer: 1 neuron, linear output, MSE loss, connected to hidden layer
+o = OutputLayer(1, "none", "MSE")
+o.attach_after(h1)
+```
+
+`attach_after(layer)` sets up the doubly-linked `previous` / `next` pointers that the forward and backward passes rely on to move activations and gradients through the network.
+
+</Step>
+
+<Step title="Initialize weights and biases">
+
+Before training, every `HiddenLayer` and `OutputLayer` must have its weight matrix and bias vector initialized. Call `set_weights(method)` and `set_biases(method)` on each trainable layer:
+
+```python
+h1.set_weights("normal_random")
+h1.set_biases("zeros")
+
+o.set_weights("normal_random")
+o.set_biases("zeros")
+```
+
+`"normal_random"` draws weights from a standard normal distribution N(0, 1). `"zeros"` initializes every bias to 0.0. See the Introduction for the full list of supported initialization strategies.
 
 <Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
-
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+  Try swapping `"normal_random"` for `"xavier"` (good for sigmoid activations) or `"he"` (good for ReLU activations) and observe how the number of epochs needed to converge changes. Xavier initialization scales weights by `1/√n`, which keeps activation variances stable across layers and often leads to faster, more reliable convergence.
 </Tip>
+
+</Step>
+
+<Step title="Build the ANN list">
+
+The training utilities expect a plain Python list that begins with an `InputLayer` and ends with an `OutputLayer`:
+
+```python
+ANN = [i, h1, o]
+```
+
+The order of elements in this list defines the forward-pass execution order. Both `gradient_descent_epoch` and `gradient_descent_threshold` iterate over this list from front to back during the forward pass and from back to front during backpropagation.
+
+</Step>
+
+<Step title="Define your dataset and train">
+
+Set up the four XOR input/output pairs and call `gradient_descent_epoch` with a learning rate and an epoch count. The function prints the loss and accuracy after every epoch and returns the updated network along with the full loss history:
+
+```python
+x = np.array([
+    [0, 0],
+    [0, 1],
+    [1, 0],
+    [1, 1]
+])
+
+y = np.array([
+    [0],
+    [1],
+    [1],
+    [0]
+])
+
+ANN, loss = gradient_descent_epoch(ANN, x, y, eta=0.1, epochs=50000)
+
+# Plot the loss curve
+plt.plot(loss)
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.title("XOR Training Loss")
+plt.show()
+```
+
+Each call to `gradient_descent_epoch` performs a complete forward pass, backward pass, and gradient-descent weight update for every sample in `x` on every epoch. The returned `loss` list contains one scalar loss value per epoch, making it straightforward to visualize convergence.
+
+</Step>
+
+</Steps>
+
+## Complete XOR training script
+
+The code block below combines all of the steps above into a single, self-contained script you can run directly.
+
+<CodeGroup>
+
+```python xor_train.py
+from ANN import *
+
+# ── Hyperparameters ──────────────────────────────────────────
+eta = 0.1
+epochs = 50000
+
+# ── Build the network ────────────────────────────────────────
+i  = InputLayer(2, "sigmoid")
+
+h1 = HiddenLayer(2, "sigmoid")
+h1.attach_after(i)
+h1.set_weights("normal_random")
+h1.set_biases("zeros")
+
+o  = OutputLayer(1, "none", "MSE")
+o.attach_after(h1)
+o.set_weights("normal_random")
+o.set_biases("zeros")
+
+ANN = [i, h1, o]
+
+# ── Dataset ──────────────────────────────────────────────────
+x = np.array([
+    [0, 0],
+    [0, 1],
+    [1, 0],
+    [1, 1]
+])
+
+y = np.array([
+    [0],
+    [1],
+    [1],
+    [0]
+])
+
+# ── Train ────────────────────────────────────────────────────
+ANN, loss = gradient_descent_epoch(ANN, x, y, eta, epochs)
+
+# ── Plot loss curve ──────────────────────────────────────────
+plt.plot(loss)
+plt.xlabel("Epoch")
+plt.ylabel("MSE Loss")
+plt.title("XOR Training Loss")
+plt.show()
+
+# ── Inference ────────────────────────────────────────────────
+for j in range(len(x)):
+    ANN[0].put_values(x[j])
+    for layer in ANN:
+        layer.forward()
+    print(f"Input: {x[j]}, Predicted: {ANN[-1].output()}")
+```
+
+</CodeGroup>
+
+## Running inference after training
+
+Once training is complete, you can run the network on any input by loading values into the input layer and triggering a forward pass through every layer. The final output is retrieved from the last layer via `output()`:
+
+```python
+for j in range(len(x)):
+    ANN[0].put_values(x[j])
+    for layer in ANN:
+        layer.forward()
+    print(f"Input: {x[j]}, Predicted: {ANN[-1].output()}")
+```
+
+Expected output after successful convergence:
+
+```
+Input: [0 0], Predicted: [[0.03]]
+Input: [0 1], Predicted: [[0.97]]
+Input: [1 0], Predicted: [[0.97]]
+Input: [1 1], Predicted: [[0.03]]
+```
+
+The exact values will vary between runs due to random weight initialization, but a well-trained XOR network should push predictions close to 0 for inputs `[0,0]` and `[1,1]` and close to 1 for inputs `[0,1]` and `[1,0]`.
+
+## Using gradient_descent_threshold instead
+
+If you prefer to train until a quality target is met rather than for a fixed number of epochs, swap in `gradient_descent_threshold` and provide a target loss value instead of an epoch count:
+
+```python
+ANN, loss = gradient_descent_threshold(ANN, x, y, eta=0.1, thresh=0.01)
+```
+
+Training will stop automatically as soon as `loss ≤ 0.01` is reached, or immediately if the loss starts increasing between consecutive epochs — a built-in safeguard against divergence.
